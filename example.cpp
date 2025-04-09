@@ -25,11 +25,13 @@ int main(){
     vector<vector<int64_t>> sets = {{1, 2, 3, 10}, {2, 3, 4, 5}, {1, 10}, {11, 12}, {1, 3, 5}};
     rrr_generalization_t sswt(sets, 13);
 
+
     vector<int64_t> intersection = sswt.intersect(1, 2);
     for (const auto& val : intersection) {
         cout << val << " "; 
     }
-    cout << std::endl;
+    cout << endl;
+    cout << sswt.size_in_bytes() << endl;
 
     return 0;
 }

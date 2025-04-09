@@ -187,7 +187,6 @@ private:
     }
 
     void collect_set(int64_t pos, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& result_set) const {
-        // cout << "Collecting set at pos=" << pos << endl;
         // Traverse deeper into the children 
         // how big of children
         if (child_idx >= children.size() || !children[child_idx]) {  
@@ -448,8 +447,19 @@ public:
     }
 
 
-    int64_t size_in_bytes() const{
-        return 0; // TODO
+    size_t size_in_bytes() const{
+        size_t sz = 0; 
+        sz += sizeof(int64_t)*alphabet.capacity();
+        sz += sizeof(int64_t)*char_to_idx.capacity();
+        sz += root.size_in_bytes();
+        sz += children.capacity() * sizeof(optional<base3_rank_t>);
+        for (const auto&c : children) {
+            if (c.has_value()) {
+                sz += c->size_in_bytes();
+            }
+        }
+        sz += child_intervals.capacity() * sizeof(optional<pair<int64_t, int64_t>>);
+        return sz;
     }
 
     int64_t serialize(ostream& os) const{

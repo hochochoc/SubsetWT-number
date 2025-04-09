@@ -108,6 +108,7 @@ int main() {
     rrr_generalization_t sswt(colorSets, 7000);
     int64_t t1 = current_time_micros();
     cout << "Tree building time: " << (double)(t1-t0) << " us" << endl;
+    cout << "Size: " << sswt.size_in_bytes() << endl;
 
     // Intersect
     int64_t total_time_micros_intersect = 0;

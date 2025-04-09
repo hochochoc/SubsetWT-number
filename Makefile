@@ -8,3 +8,6 @@ tests:
 
 queries:
 	g++-10 gen_queries.cpp -std=c++20 -g -o gen_queries -Wno-deprecated-declarations
+
+benchmark:
+	g++-10 color_set_tests.cpp ./sdsl-lite/build/lib/libsdsl.a -std=c++20 -I sdsl-lite/include/ -O3 -I include -I ./sdsl-lite/build/external/libdivsufsort/include/ -g -o color_set_test -Wno-deprecated-declarations
