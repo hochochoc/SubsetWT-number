@@ -93,6 +93,18 @@ vector<vector<int64_t>> load_color_sets() {
     return colorSets;
 }
 
+vector<int64_t> randomize_1000() {
+    vector<int64_t> queries(1000);
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dist(1, 558404);
+    while (queries.size() < 1000) {
+        int a = dist(gen);
+        queries.push_back(static_cast<int64_t>(a));
+    }
+    return queries;
+}
+
 int main() {
 
     // Define the types of the four main variants   
@@ -110,10 +122,11 @@ int main() {
     cout << "Tree building time: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
 
-    // Intersect
+    // Intersect and union
     int64_t total_time_micros_intersect = 0;
     int64_t total_time_micros_union = 0;
-    vector<pair<int, int>> intersect_queries = load_queries(); 
+    int64_t total_time_micros_union_range = 0;
+    vector<pair<int, int>> intersect_queries = load_queries();
     for (const auto& p : intersect_queries) {
         t0 = current_time_micros();
         sswt.intersect(p.first, p.second);
@@ -124,10 +137,16 @@ int main() {
         sswt.union_two(p.first, p.second);
         t1 = current_time_micros();
         total_time_micros_union += t1 - t0; 
+
+        t0 = current_time_micros();
+        sswt.union_range(p.first, p.second);
+        t1 = current_time_micros();
+        total_time_micros_union_range += t1 - t0; 
     }
     
     cout << "Intersection Time: " << (double)(total_time_micros_intersect) / intersect_queries.size() << " us/query" << endl;
     cout << "Union Time: " << (double)(total_time_micros_union) / intersect_queries.size() << " us/query" << endl;
+    cout << "Union Time, gap=50: " << (double)(total_time_micros_union_range) / intersect_queries.size() << " us/query" << endl;
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <utility>
 #include <iostream>
 #include <optional>
+#include <stack>
 
 using namespace std;
 
@@ -210,7 +211,47 @@ private:
         }
     }
 
+    struct Frame {
+        int64_t pos; 
+        int64_t child_idx; 
+        int64_t start;
+        int64_t end;
+    };
+
+    void collect_set_stack(int64_t pos, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& result_set) const {
+        
+        std::stack<Frame> stk; 
+        stk.push({pos, child_idx, start, end});
+        // Traverse deeper into the children 
+        // how big of children
+        while(!stk.empty()) {
+            Frame f = stk.top(); stk.pop(); 
+
+            if (f.child_idx >= children.size() || !children[f.child_idx]) {
+                result_set.insert(result_set.end(), alphabet.begin() + start, alphabet.begin() + end);
+                continue;
+            }
+            const auto& interval = *child_intervals[child_idx];
+            int64_t left = interval.first;
+            int64_t right = interval.second; // get child range 
+
+                // what is child_intervals? 
+            char child_sym = get_child_sym(f.pos, child_idx);
+
+            if (child_sym == CHILD_LEFT || child_sym == CHILD_BOTH) {
+                int64_t new_pos = children[f.child_idx]->rankpair(f.pos, CHILD_RIGHT);
+                stk.push({new_pos, get_right_child_idx(f.child_idx), (left+right)/2, f.end});
+            }
+
+            if (child_sym == CHILD_RIGHT || child_sym == CHILD_BOTH) {
+                int64_t new_pos = children[f.child_idx]->rankpair(f.pos, CHILD_LEFT);
+                stk.push({new_pos, get_left_child_idx(child_idx), (left+right)/2, f.end});
+            }
+        }
+    }
+
     void intersect_helper(int64_t x1, int64_t x2, int64_t child_idx1, int64_t child_idx2, int64_t start, int64_t end, vector<int64_t>& intersection) {
+
         if ((child_idx1 >= children.size() || !children[child_idx1]) || (child_idx2 >= children.size() || !children[child_idx2])) {
             intersection.insert(intersection.end(), alphabet.begin()+start, alphabet.begin()+end);
             return;
@@ -253,10 +294,6 @@ private:
         char child_sym1 = get_child_sym(x1, child_idx1);
         char child_sym2 = get_child_sym(x2, child_idx2);
 
-        // cout << "Child sym1: " << static_cast<int>(child_sym1) << endl;
-        // cout << "Child sym2: " << static_cast<int>(child_sym2) << endl;
-
-
         int64_t x1_left = children[child_idx1]->rankpair(x1, CHILD_LEFT);
         int64_t x1_right = children[child_idx1]->rankpair(x1, CHILD_RIGHT);
 
@@ -298,6 +335,36 @@ private:
         }
     }
 
+    pair<vector<int64_t>, vector<int64_t>> extract_syms(int64_t l, int64_t r) const {
+        vector<int64_t> left_syms;
+        vector<int64_t> right_syms;
+        for (int64_t i = l; i <= r; ++i) {
+            char sym = get_root_sym(i);
+            if (sym == ROOT_BOTH || sym == ROOT_LEFT) {
+                left_syms.push_back(i); 
+            } 
+            if (sym == ROOT_BOTH || sym == ROOT_RIGHT) {
+                right_syms.push_back(i);
+            }
+        }
+        return {left_syms, right_syms};
+    }
+
+    pair<vector<int64_t>, vector<int64_t>> extract_child_syms(int64_t child_idx, int64_t l, int64_t r) const {
+        vector<int64_t> left_child_syms;
+        vector<int64_t> right_child_syms;
+        for (int64_t i = l; i <= r; ++i) {
+            char sym = get_child_sym(i, child_idx);
+            if (sym == CHILD_BOTH || sym == CHILD_LEFT) {
+                left_child_syms.push_back(i); 
+            } 
+            if (sym == CHILD_BOTH || sym == CHILD_RIGHT) {
+                right_child_syms.push_back(i);
+            }
+        }
+        return {left_child_syms, right_child_syms};
+    }
+
 public:
 
     SubsetWT(){}
@@ -336,8 +403,6 @@ public:
         int64_t start = 0, end = alphabet.size();
 
         char root_sym = get_root_sym(pos);
-
-        cout << "Root sym: " << static_cast<int>(root_sym) << endl;
         
         int64_t x = pos;
         
@@ -346,14 +411,39 @@ public:
         if (root_sym == ROOT_LEFT || root_sym == ROOT_BOTH) {
             child_idx = 0; 
             x = root.rankpair(pos, ROOT_LEFT);
-            cout << "Index in root-left child: " << x << endl;
             collect_set(x, 0, 0, alphabet.size() / 2, result_set);
         } 
         if (root_sym == ROOT_RIGHT || root_sym == ROOT_BOTH) {
             child_idx = 1; 
             x = root.rankpair(pos, ROOT_RIGHT);
-            cout << "Index in root-right child: " << x << endl;
             collect_set(x, 1, alphabet.size() / 2, end, result_set);
+        }
+
+        return result_set;
+    }
+
+    // return i-th color set as a vector of integers 
+    vector<int64_t> extract_set_stack(int64_t pos) const {
+        vector<int64_t> result_set; 
+
+        int64_t child_idx = 0; // start at root 
+        int64_t start = 0, end = alphabet.size();
+
+        char root_sym = get_root_sym(pos);
+        
+        int64_t x = pos;
+        
+        if (root_sym == ROOT_NONE) return result_set;
+
+        if (root_sym == ROOT_LEFT || root_sym == ROOT_BOTH) {
+            child_idx = 0; 
+            x = root.rankpair(pos, ROOT_LEFT);
+            collect_set_stack(x, 0, 0, alphabet.size() / 2, result_set);
+        } 
+        if (root_sym == ROOT_RIGHT || root_sym == ROOT_BOTH) {
+            child_idx = 1; 
+            x = root.rankpair(pos, ROOT_RIGHT);
+            collect_set_stack(x, 1, alphabet.size() / 2, end, result_set);
         }
 
         return result_set;
@@ -405,11 +495,7 @@ public:
         int64_t x2_right = root.rankpair(pos2, ROOT_RIGHT); 
 
         char root_sym1 = get_root_sym(pos1); 
-        char root_sym2 = get_root_sym(pos2); 
-
-        // cout << "Root sym1: " << static_cast<int>(root_sym1) << endl;
-        // cout << "Root sym2: " << static_cast<int>(root_sym2) << endl;
-
+        char root_sym2 = get_root_sym(pos2);
 
         if (root_sym1 == root_sym2) {
             if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_LEFT) {
@@ -443,7 +529,72 @@ public:
                 }
             }
         }
-        return union_set; 
+        return union_set;
+    }
+
+    
+
+    void union_range_helper(int64_t child_idx, int64_t l, int64_t r, int64_t start, int64_t end, vector<int64_t>& union_set) const {
+        if (l == r) {
+            collect_set(l, child_idx, start, end, union_set);
+            return;
+        }
+        if (child_idx >= children.size() || !children[child_idx]) {
+            union_set.insert(union_set.end(), alphabet.begin()+start, alphabet.begin()+end);
+            return;
+        }
+
+        const auto& interval = *child_intervals[child_idx];
+        int64_t left = interval.first;
+        int64_t right = interval.second;
+
+        pair<vector<int64_t>, vector<int64_t>> syms = extract_child_syms(child_idx, l, r);
+        vector<int64_t> left_child_syms = syms.first;
+        vector<int64_t> right_child_syms = syms.second;
+
+        if (left_child_syms.size() > 0) {
+            int64_t l_left = children[child_idx]->rankpair(left_child_syms.front(), CHILD_LEFT);
+            int64_t r_left = children[child_idx]->rankpair(left_child_syms.back(), CHILD_LEFT);
+            union_range_helper(get_left_child_idx(child_idx), l_left, r_left, start, (left+right)/2, union_set);
+        }
+
+        if (right_child_syms.size() > 0) {
+            int64_t l_right = children[child_idx]->rankpair(right_child_syms.front(), CHILD_RIGHT);
+            int64_t r_right = children[child_idx]->rankpair(right_child_syms.back(), CHILD_RIGHT);
+            union_range_helper(get_right_child_idx(child_idx), l_right, r_right, (left+right)/2, end, union_set);
+        }
+    }
+
+    vector<int64_t> union_range(int64_t left, int64_t right) { 
+        if (left == right) {
+            return extract_set(left);
+        }
+
+        if (left > right) {
+            throw std::out_of_range("");
+        }
+
+        vector<int64_t> union_set; 
+
+        int64_t start=0, end=alphabet.size(); 
+        
+        pair<vector<int64_t>, vector<int64_t>> syms = extract_syms(left, right);
+
+        vector<int64_t> left_syms = syms.first;
+        vector<int64_t> right_syms = syms.second;
+        if (left_syms.size() > 0) {
+            int64_t l_left = root.rankpair(left_syms.front(), ROOT_LEFT);
+            int64_t r_left = root.rankpair(left_syms.back(), ROOT_LEFT);
+            union_range_helper(0, l_left, r_left, start, end/2, union_set);
+        }
+
+        if (right_syms.size() > 0) {
+            int64_t l_right = root.rankpair(right_syms.front(), ROOT_RIGHT);
+            int64_t r_right = root.rankpair(right_syms.back(), ROOT_RIGHT);
+            union_range_helper(1, l_right, r_right, end/2, end, union_set);
+        }
+
+        return union_set;
     }
 
 

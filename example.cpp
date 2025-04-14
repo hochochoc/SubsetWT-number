@@ -22,11 +22,11 @@ int main(){
     // cout << "rank(" << pos << "," << symbol << ") = " << sswt.rank(pos, symbol) << endl;
 
     // numbers
-    vector<vector<int64_t>> sets = {{1, 2, 3, 10}, {2, 3, 4, 5}, {1, 10}, {11, 12}, {1, 3, 5}};
+    vector<vector<int64_t>> sets = {{1, 2, 3}, {2, 3, 4}, {1, 2, 5}, {5}, {10}, {1, 4}, {11, 12}, {5, 10, 11}, {1, 3, 5}};
     rrr_generalization_t sswt(sets, 13);
 
 
-    vector<int64_t> intersection = sswt.intersect(1, 2);
+    vector<int64_t> intersection = sswt.union_range(5, 8);
     for (const auto& val : intersection) {
         cout << val << " "; 
     }
