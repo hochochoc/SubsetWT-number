@@ -49,7 +49,7 @@ int gen_pair_range() {
 
     std::ofstream out("union_range_100.txt");
     for (const auto& [a, b] : unique_pairs) {
-        out << a << " " << b << "\n";
+        out << a << "," << b << "\n";
     }
 
     std::cout << "Generated 'pairs.txt' with " << unique_pairs.size() << " unique lines.\n";

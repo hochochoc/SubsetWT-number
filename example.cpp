@@ -26,8 +26,8 @@ int main(){
     rrr_generalization_t sswt(sets, 13);
 
 
-    vector<int64_t> intersection = sswt.union_range(5, 8);
-    for (const auto& val : intersection) {
+    vector<int64_t> union_set = sswt.union_range(5, 8);
+    for (const auto& val : union_set) {
         cout << val << " "; 
     }
     cout << endl;
