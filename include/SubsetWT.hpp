@@ -524,13 +524,11 @@ public:
         const auto& interval = *child_intervals[child_idx];
         int64_t left = interval.first;
         int64_t right = interval.second;
-
-        cout << "left union " << l_left << "-" << r_left << endl;
+        
         if (l_left <= r_left) {
             union_range_helper(get_left_child_idx(child_idx), l_left, r_left, start, (left+right)/2, union_set);
         }
-        
-        cout << "right union " << l_right << "-" << r_right << endl;
+
         if (l_right <= r_right) {
             union_range_helper(get_right_child_idx(child_idx), l_right, r_right, (left+right)/2, end, union_set);
         }
@@ -549,19 +547,16 @@ public:
 
         int64_t start=0, end=alphabet.size(); 
         
-        // TODO: check case left-1=0
         int64_t l_left = root.rankpair(left-1, ROOT_LEFT) + 1;
         int64_t r_left = root.rankpair(right, ROOT_LEFT);
 
         int64_t l_right = root.rankpair(left-1, ROOT_RIGHT) + 1;
         int64_t r_right = root.rankpair(right, ROOT_RIGHT);
 
-        cout << "Left union " << l_left << "-" << r_left << endl;
         if (l_left <= r_left) {
             union_range_helper(0, l_left, r_left, start, end/2, union_set);
         }
         
-        cout << "Right union " << l_right << "-" << r_right << endl;
         if (l_right <= r_right) {
             union_range_helper(1, l_right, r_right, end/2, end, union_set);
         }
