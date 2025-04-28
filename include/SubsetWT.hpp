@@ -6,6 +6,9 @@
 #include <optional>
 #include <stack>
 #include <unordered_set>
+#include <fstream>
+
+#include <chrono>
 
 using namespace std;
 
@@ -34,6 +37,7 @@ public:
 
     // Alphabet intervals of child nodes
     vector<optional<pair<int64_t, int64_t>>> child_intervals;    
+    vector<vector<int64_t>> full_subtree;
 
 
 private:
@@ -72,7 +76,9 @@ private:
     // [start, end) is a half-open interval
     void init_children_recursion(int64_t child_idx, int64_t start, int64_t end, const vector<vector<int64_t>>& sets, vector<int64_t>&& sets_in_this_child){
 
-        if(end - start <= 1) return; // Alphabet is singleton or empty
+        if(end - start <= 1) {
+            return; // Alphabet is singleton or empty
+        }
 
         child_intervals[child_idx] = {start,end};
 
@@ -80,7 +86,7 @@ private:
         // [start, midpoint) go left, [midpoint, end) go right
 
         // Set indexes that go to left and to right
-        vector<int64_t> sets_to_left, sets_to_right;
+        vector<int64_t> sets_to_left, sets_to_right, sets_to_both;
 
         vector<char> split_seq; // 0 = left, 1 = right, 2 = both
 
@@ -101,6 +107,7 @@ private:
 
             if(has_left) sets_to_left.push_back(i);
             if(has_right) sets_to_right.push_back(i);
+            if (has_left & has_right) sets_to_both.push_back(i+1);
         }
 
         vector<int64_t>().swap(sets_in_this_child); // Free memory
@@ -113,6 +120,15 @@ private:
         int64_t right_idx = get_right_child_idx(child_idx);
         init_children_recursion(left_idx , start          , (start + end)/2, sets, std::move(sets_to_left));
         init_children_recursion(right_idx, (start + end)/2, end            , sets, std::move(sets_to_right));
+        if (!full_subtree[left_idx].empty() && !full_subtree[right_idx].empty()) {
+            vector<int64_t> left_indices = full_subtree[left_idx]; 
+            vector<int64_t> right_indices = full_subtree[right_idx];
+            set_intersection(left_indices.begin(), left_indices.end(), right_indices.begin(), right_indices.end(), back_inserter(full_subtree[child_idx]));
+        }
+        if ((left_idx >= children.size() || !children[left_idx]) && (right_idx >= children.size() || !children[right_idx])) {
+            // cout << "full subtree at child_idx: " << child_idx << endl;
+            full_subtree[child_idx] = sets_to_both;
+        }
     }
 
     // Helper function used in the constructor
@@ -127,6 +143,8 @@ private:
         for(int64_t i = 0; i < sets.size(); i++){
             bool has_left = false;
             bool has_right = false;
+            // TODO: increase time usage here 
+            // color set is sorted 
             for(int64_t c : sets[i]){
                 if(c < middle_char) has_left = true;
                 else has_right = true;
@@ -147,6 +165,7 @@ private:
         // Initialize space for the children
         child_intervals.resize(2*sigma);
         children.resize(2*sigma);
+        full_subtree.resize(2*sigma);
 
         // Initialize the children
         init_children_recursion(0, 0, sigma/2, sets, std::move(sets_to_left_child)); // Left child of root
@@ -188,30 +207,6 @@ private:
         return CHILD_BOTH;
     }
 
-    void collect_set(int64_t pos, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& result_set) const {
-        // Traverse deeper into the children 
-        // how big of children
-        if (child_idx >= children.size() || !children[child_idx]) {  
-            result_set.insert(result_set.end(), alphabet.begin() + start, alphabet.begin() + end);
-            return;
-        }
-        int64_t x = pos;
-    
-        const auto& interval = *child_intervals[child_idx];
-        int64_t left = interval.first;
-        int64_t right = interval.second; // get child range 
-
-            // what is child_intervals? 
-        char child_sym = get_child_sym(x, child_idx);
-
-        if (child_sym == CHILD_LEFT || child_sym == CHILD_BOTH) {
-            collect_set(children[child_idx]->rankpair(x, CHILD_LEFT), get_left_child_idx(child_idx), start, (left+right)/2, result_set);
-        }
-        if (child_sym == CHILD_RIGHT || child_sym == CHILD_BOTH) {
-            collect_set(children[child_idx]->rankpair(x, CHILD_RIGHT), get_right_child_idx(child_idx), (left+right)/2, end, result_set);
-        }
-    }
-
     struct SingleFrame {
         int64_t pos; 
         int64_t child_idx; 
@@ -235,19 +230,22 @@ private:
             const auto& interval = *child_intervals[f.child_idx];
             int64_t left = interval.first;
             int64_t right = interval.second; // get child range 
+            int64_t mid = (left+right)/2;
 
-                // what is child_intervals? 
-            char child_sym = get_child_sym(f.pos, f.child_idx);
+            const auto& child_rank = *children[f.child_idx];
 
-            if (child_sym == CHILD_LEFT || child_sym == CHILD_BOTH) {
-                int64_t new_pos = children[f.child_idx]->rankpair(f.pos, CHILD_LEFT);
-                stk.push({new_pos, get_left_child_idx(f.child_idx), f.start, (left+right)/2});
+            int64_t left_index = child_rank.rankpair(f.pos, CHILD_LEFT);
+            int64_t right_index = child_rank.rankpair(f.pos, CHILD_RIGHT);
+            int64_t prev_left_index = child_rank.rankpair(f.pos-1, CHILD_LEFT);
+            int64_t prev_right_index = child_rank.rankpair(f.pos-1, CHILD_RIGHT);
+
+            if (right_index > prev_right_index) {
+                stk.push({right_index, get_right_child_idx(f.child_idx), mid, f.end});
             }
 
-            if (child_sym == CHILD_RIGHT || child_sym == CHILD_BOTH) {
-                int64_t new_pos = children[f.child_idx]->rankpair(f.pos, CHILD_RIGHT);
-                stk.push({new_pos, get_right_child_idx(f.child_idx), (left+right)/2, f.end});
-            }
+            if (left_index > prev_left_index) {
+                stk.push({left_index, get_left_child_idx(f.child_idx), f.start, mid});
+            }            
         }
     }
 
@@ -272,86 +270,92 @@ private:
             const auto& interval = *child_intervals[child_idx];
             int64_t left = interval.first;
             int64_t right = interval.second;
-    
-            char child_sym1 = get_child_sym(x1, child_idx);
-            char child_sym2 = get_child_sym(x2, child_idx);
-    
-            if ((child_sym1 == CHILD_LEFT || child_sym1 == CHILD_BOTH) &&
-                (child_sym2 == CHILD_LEFT || child_sym2 == CHILD_BOTH)) {
-                    int64_t new_x1 = children[child_idx]->rankpair(x1, CHILD_LEFT);
-                    int64_t new_x2 = children[child_idx]->rankpair(x2, CHILD_LEFT);
-    
-                    stk.push({new_x1, new_x2, get_left_child_idx(child_idx), start, (left+right)/2});
-                }
-            if ((child_sym1 == CHILD_RIGHT || child_sym1 == CHILD_BOTH) &&
-                (child_sym2 == CHILD_RIGHT || child_sym2 == CHILD_BOTH)) {
-                    int64_t new_x1 = children[child_idx]->rankpair(x1, CHILD_RIGHT);
-                    int64_t new_x2 = children[child_idx]->rankpair(x2, CHILD_RIGHT);
-    
-                    stk.push({new_x1, new_x2, get_right_child_idx(child_idx), (left+right)/2, end});
-                }
+            int64_t mid = (left+right)/2;
+
+            const auto& child_rank = *children[child_idx];
+
+            int64_t x1_left_index = child_rank.rankpair(x1, CHILD_LEFT);
+            int64_t x1_right_index = child_rank.rankpair(x1, CHILD_RIGHT);
+            
+            int64_t x2_left_index = child_rank.rankpair(x2, CHILD_LEFT);
+            int64_t x2_right_index = child_rank.rankpair(x2, CHILD_RIGHT);
+
+            int64_t prev_x1_right_index = child_rank.rankpair(x1-1, CHILD_RIGHT);
+            int64_t prev_x2_right_index = child_rank.rankpair(x2-1, CHILD_RIGHT); 
+
+            int64_t prev_x1_left_index = child_rank.rankpair(x1-1, CHILD_LEFT);
+            int64_t prev_x2_left_index = child_rank.rankpair(x2-1, CHILD_LEFT);
+
+            if (x1_right_index > prev_x1_right_index && x2_right_index > prev_x2_right_index) {
+                stk.push({x1_right_index, x2_right_index, get_right_child_idx(child_idx), mid, end});
+            }
+
+            if (x1_left_index > prev_x1_left_index && x2_left_index > prev_x2_left_index) {
+                stk.push({x1_left_index, x2_left_index, get_left_child_idx(child_idx), start, mid});
+            }
         }
     }
 
-    void union_helper(int64_t x1, int64_t x2, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& union_set) {
-        std::stack<PairFrame> stk; 
-        stk.push({x1, x2, child_idx, start, end}); 
 
-        while (!stk.empty()) {
-            auto [x1, x2, child_idx, start, end] = stk.top(); stk.pop(); 
-            if (child_idx >= children.size() || !children[child_idx]) {
-                union_set.insert(union_set.end(), alphabet.begin()+start, alphabet.begin()+end);
-                continue;
-            }
+    // void union_helper(int64_t x1, int64_t x2, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& union_set) {
+    //     std::stack<PairFrame> stk; 
+    //     stk.push({x1, x2, child_idx, start, end}); 
+
+    //     while (!stk.empty()) {
+    //         auto [x1, x2, child_idx, start, end] = stk.top(); stk.pop(); 
+    //         if (child_idx >= children.size() || !children[child_idx]) {
+    //             union_set.insert(union_set.end(), alphabet.begin()+start, alphabet.begin()+end);
+    //             continue;
+    //         }
     
-            const auto& interval = *child_intervals[child_idx];
-            int64_t left = interval.first;
-            int64_t right = interval.second;
+    //         const auto& interval = *child_intervals[child_idx];
+    //         int64_t left = interval.first;
+    //         int64_t right = interval.second;
     
-            char child_sym1 = get_child_sym(x1, child_idx);
-            char child_sym2 = get_child_sym(x2, child_idx);
+    //         char child_sym1 = get_child_sym(x1, child_idx);
+    //         char child_sym2 = get_child_sym(x2, child_idx);
     
-            int64_t x1_left = children[child_idx]->rankpair(x1, CHILD_LEFT);
-            int64_t x1_right = children[child_idx]->rankpair(x1, CHILD_RIGHT);
+    //         int64_t x1_left = children[child_idx]->rankpair(x1, CHILD_LEFT);
+    //         int64_t x1_right = children[child_idx]->rankpair(x1, CHILD_RIGHT);
     
-            int64_t x2_left = children[child_idx]->rankpair(x2, CHILD_LEFT);
-            int64_t x2_right = children[child_idx]->rankpair(x2, CHILD_RIGHT);
+    //         int64_t x2_left = children[child_idx]->rankpair(x2, CHILD_LEFT);
+    //         int64_t x2_right = children[child_idx]->rankpair(x2, CHILD_RIGHT);
         
-            if (child_sym1 == child_sym2) {
-                if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_LEFT))  {
-                    stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2});
-                } 
-                if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_RIGHT)) {
-                    stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-                }
-            } else {
-                if (child_sym1 == CHILD_BOTH) {
-                    if (child_sym2 == CHILD_LEFT) {
-                        stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
-                        collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-                    } else {// CHILD_RIGHT
-                        collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-                        stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-                    }
-                } else if (child_sym1 == CHILD_LEFT) {
-                    if (child_sym2 == CHILD_RIGHT) {
-                        collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-                    } else { // CHILD_BOTH
-                        stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
-                    }
-                    collect_set_stack(x2_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-                } else {
-                    collect_set_stack(x2_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-                    if (child_sym2 == CHILD_LEFT) {
-                        collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-                    } else { //CHILD_BOTH
-                        stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-                    }
-                }
+    //         if (child_sym1 == child_sym2) {
+    //             if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_LEFT))  {
+    //                 stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2});
+    //             } 
+    //             if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_RIGHT)) {
+    //                 stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
+    //             }
+    //         } else {
+    //             if (child_sym1 == CHILD_BOTH) {
+    //                 if (child_sym2 == CHILD_LEFT) {
+    //                     stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
+    //                     collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
+    //                 } else {// CHILD_RIGHT
+    //                     collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
+    //                     stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
+    //                 }
+    //             } else if (child_sym1 == CHILD_LEFT) {
+    //                 if (child_sym2 == CHILD_RIGHT) {
+    //                     collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
+    //                 } else { // CHILD_BOTH
+    //                     stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
+    //                 }
+    //                 collect_set_stack(x2_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
+    //             } else {
+    //                 collect_set_stack(x2_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
+    //                 if (child_sym2 == CHILD_LEFT) {
+    //                     collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
+    //                 } else { //CHILD_BOTH
+    //                     stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
+    //                 }
+    //             }
                 
-            }
-        }
-    }
+    //         }
+    //     }
+    // }
 
     void union_range_helper(int64_t child_idx, int64_t l, int64_t r, int64_t start, int64_t end, vector<int64_t>& union_set) const {
         std::stack<PairFrame> stk; 
@@ -370,22 +374,24 @@ private:
                 continue;
             }
 
-            int64_t l_left = (l == 0) ? 1 : children[child_idx]->rankpair(l-1, CHILD_LEFT) + 1;
+            int64_t l_left = children[child_idx]->rankpair(l-1, CHILD_LEFT) + 1;
             int64_t r_left = children[child_idx]->rankpair(r, CHILD_LEFT);
 
-            int64_t l_right = (l == 0) ? 1 : children[child_idx]->rankpair(l-1, CHILD_RIGHT) + 1;
+            int64_t l_right = children[child_idx]->rankpair(l-1, CHILD_RIGHT) + 1;
             int64_t r_right = children[child_idx]->rankpair(r, CHILD_RIGHT);
 
             const auto& interval = *child_intervals[child_idx];
             int64_t left = interval.first;
             int64_t right = interval.second;
-            
-            if (l_left <= r_left) {
-                stk.push({l_left, r_left, get_left_child_idx(child_idx), start, (left+right)/2});
-            }
+
+            int64_t mid = (left+right)/2;
 
             if (l_right <= r_right) {
-                stk.push({l_right, r_right, get_right_child_idx(child_idx), (left+right)/2, end});
+                stk.push({l_right, r_right, get_right_child_idx(child_idx), mid, end});
+            }
+            
+            if (l_left <= r_left) {
+                stk.push({l_left, r_left, get_left_child_idx(child_idx), start, mid});
             }
         }
     }
@@ -427,148 +433,122 @@ public:
 
         int64_t child_idx = 0; // start at root 
         int64_t start = 0, end = alphabet.size();
+        int64_t mid = end/2;
 
-        char root_sym = get_root_sym(pos);
-        
-        int64_t x = pos;
-        
-        if (root_sym == ROOT_NONE) return result_set;
+        int64_t left_index = root.rankpair(pos, ROOT_LEFT);
+        int64_t right_index = root.rankpair(pos, ROOT_RIGHT);
 
-        if (root_sym == ROOT_LEFT || root_sym == ROOT_BOTH) {
-            child_idx = 0; 
-            x = root.rankpair(pos, ROOT_LEFT);
-            collect_set(x, 0, 0, alphabet.size() / 2, result_set);
-        } 
-        if (root_sym == ROOT_RIGHT || root_sym == ROOT_BOTH) {
-            child_idx = 1; 
-            x = root.rankpair(pos, ROOT_RIGHT);
-            collect_set(x, 1, alphabet.size() / 2, end, result_set);
+        int64_t prev_left_index = root.rankpair(pos-1, ROOT_LEFT); 
+        int64_t prev_right_index = root.rankpair(pos-1, ROOT_RIGHT); 
+
+        if (left_index > prev_left_index) {
+            collect_set_stack(left_index, 0, 0, mid, result_set);
+        }
+
+        if (right_index > prev_right_index) {
+            collect_set_stack(right_index, 1, mid, end, result_set);
         }
 
         return result_set;
     }
 
-    // return i-th color set as a vector of integers 
-    vector<int64_t> extract_set_stack(int64_t pos) const {
-        vector<int64_t> result_set; 
-
-        int64_t child_idx = 0; // start at root 
-        int64_t start = 0, end = alphabet.size();
-
-        char root_sym = get_root_sym(pos);
-        
-        int64_t x = pos;
-        
-        if (root_sym == ROOT_NONE) return result_set;
-
-        if (root_sym == ROOT_LEFT || root_sym == ROOT_BOTH) {
-            child_idx = 0; 
-            x = root.rankpair(pos, ROOT_LEFT);
-            collect_set_stack(x, 0, 0, alphabet.size() / 2, result_set);
-        } 
-        if (root_sym == ROOT_RIGHT || root_sym == ROOT_BOTH) {
-            child_idx = 1; 
-            x = root.rankpair(pos, ROOT_RIGHT);
-            collect_set_stack(x, 1, alphabet.size() / 2, end, result_set);
-        }
-
-        return result_set;
-    }
 
     vector<int64_t> intersect(int64_t pos1, int64_t pos2) {
+        if (pos1 > pos2) {
+            throw std::out_of_range("right index should be larger than left index");
+        }
         vector<int64_t> intersection;
 
         int64_t start = 0, end = alphabet.size();
+        int64_t mid = end/2;
 
-        int64_t x1, x2;
+        int64_t pos1_left_index = root.rankpair(pos1, ROOT_LEFT);
+        int64_t pos1_right_index = root.rankpair(pos1, ROOT_RIGHT);
 
-        char root_sym1 = get_root_sym(pos1);
-        char root_sym2 = get_root_sym(pos2);
+        int64_t pos2_left_index = root.rankpair(pos2, ROOT_LEFT);
+        int64_t pos2_right_index = root.rankpair(pos2, ROOT_RIGHT);
 
-        if ((root_sym1 == ROOT_LEFT || root_sym1 == ROOT_BOTH) && 
-            (root_sym2 == ROOT_LEFT || root_sym2 == ROOT_BOTH)) {
-                x1 = root.rankpair(pos1, ROOT_LEFT); 
-                x2 = root.rankpair(pos2, ROOT_LEFT);
-                intersect_helper(x1, x2, 0, start, end/2, intersection);
-            }
+        int64_t prev_post1_left_index = root.rankpair(pos1-1, ROOT_LEFT);
+        int64_t prev_post2_left_index = root.rankpair(pos2-1, ROOT_LEFT);
+        if (pos1_left_index > prev_post1_left_index && pos2_left_index > prev_post2_left_index) {
+            intersect_helper(pos1_left_index, pos2_left_index, 0, start, mid, intersection);
+        }
 
-        if ((root_sym1 == ROOT_RIGHT || root_sym1 == ROOT_BOTH) &&
-            (root_sym2 == ROOT_RIGHT || root_sym2 == ROOT_BOTH)) {
-                x1 = root.rankpair(pos1, ROOT_RIGHT);
-                x2 = root.rankpair(pos2, ROOT_RIGHT);
-                intersect_helper(x1, x2, 1, end/2, end, intersection);
-            }
+        int64_t prev_post1_right_index = root.rankpair(pos1-1, ROOT_RIGHT);
+        int64_t prev_post2_right_index = root.rankpair(pos2-1, ROOT_RIGHT);
+        if (pos1_right_index > prev_post1_right_index && pos2_right_index > prev_post2_right_index) {
+            intersect_helper(pos1_right_index, pos2_right_index, 1, mid, end, intersection);
+        }
+
         return intersection;
     }
 
-    
+    // vector<int64_t> union_two(int64_t pos1, int64_t pos2) {
+    //     vector<int64_t> union_set; 
 
-    vector<int64_t> union_two(int64_t pos1, int64_t pos2) {
-        vector<int64_t> union_set; 
+    //     int64_t start = 0, end = alphabet.size();
 
-        int64_t start = 0, end = alphabet.size();
+    //     int64_t x1_left = root.rankpair(pos1, ROOT_LEFT);
+    //     int64_t x1_right = root.rankpair(pos1, ROOT_RIGHT); 
 
-        int64_t x1_left = root.rankpair(pos1, ROOT_LEFT);
-        int64_t x1_right = root.rankpair(pos1, ROOT_RIGHT); 
+    //     int64_t x2_left = root.rankpair(pos2, ROOT_LEFT);
+    //     int64_t x2_right = root.rankpair(pos2, ROOT_RIGHT); 
 
-        int64_t x2_left = root.rankpair(pos2, ROOT_LEFT);
-        int64_t x2_right = root.rankpair(pos2, ROOT_RIGHT); 
+    //     char root_sym1 = get_root_sym(pos1); 
+    //     char root_sym2 = get_root_sym(pos2);
 
-        char root_sym1 = get_root_sym(pos1); 
-        char root_sym2 = get_root_sym(pos2);
-
-        if (root_sym1 == root_sym2) {
-            if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_LEFT) {
-                union_helper(x1_left, x2_left, 0, start, end/2, union_set);
-            } 
-            if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_RIGHT) {
-                union_helper(x1_right, x2_right, 1, end/2, end, union_set);
-            }
-        } else {
-            if (root_sym1 == ROOT_BOTH) {
-                if (root_sym2 == ROOT_LEFT) {
-                    union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
-                    collect_set_stack(x1_right, 1, end/2, end, union_set); 
-                } else {
-                    collect_set_stack(x1_left, 0, start, end/2, union_set); 
-                    union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
-                }
-            } else if (root_sym1 == ROOT_LEFT) {
-                if (root_sym2 == ROOT_RIGHT) {
-                    collect_set_stack(x1_left, 0, start, end/2, union_set);
-                } else {
-                    union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
-                }
-                collect_set_stack(x2_right, 1, end/2, end, union_set); 
-            } else {
-                collect_set_stack(x2_left, 0, start, end/2, union_set);
-                if (root_sym2 == ROOT_LEFT) {
-                    collect_set_stack(x1_right, 1, end/2, end, union_set);
-                } else {
-                    union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
-                }
-            }
-        }
-        return union_set;
-    }
+    //     if (root_sym1 == root_sym2) {
+    //         if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_LEFT) {
+    //             union_helper(x1_left, x2_left, 0, start, end/2, union_set);
+    //         } 
+    //         if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_RIGHT) {
+    //             union_helper(x1_right, x2_right, 1, end/2, end, union_set);
+    //         }
+    //     } else {
+    //         if (root_sym1 == ROOT_BOTH) {
+    //             if (root_sym2 == ROOT_LEFT) {
+    //                 union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
+    //                 collect_set_stack(x1_right, 1, end/2, end, union_set); 
+    //             } else {
+    //                 collect_set_stack(x1_left, 0, start, end/2, union_set); 
+    //                 union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
+    //             }
+    //         } else if (root_sym1 == ROOT_LEFT) {
+    //             if (root_sym2 == ROOT_RIGHT) {
+    //                 collect_set_stack(x1_left, 0, start, end/2, union_set);
+    //             } else {
+    //                 union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
+    //             }
+    //             collect_set_stack(x2_right, 1, end/2, end, union_set); 
+    //         } else {
+    //             collect_set_stack(x2_left, 0, start, end/2, union_set);
+    //             if (root_sym2 == ROOT_LEFT) {
+    //                 collect_set_stack(x1_right, 1, end/2, end, union_set);
+    //             } else {
+    //                 union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
+    //             }
+    //         }
+    //     }
+    //     return union_set;
+    // }
 
     vector<int64_t> union_range(int64_t left, int64_t right) { 
         if (left == right) {
-            return extract_set_stack(left);
+            return extract_set(left);
         }
 
         if (left > right) {
-            throw std::out_of_range("");
+            throw std::out_of_range("right index should be larger than left index");
         }
 
-        vector<int64_t> union_set; 
+        vector<int64_t> union_set;
 
         int64_t start=0, end=alphabet.size(); 
         
-        int64_t l_left = (left == 0) ? 1 : root.rankpair(left-1, ROOT_LEFT) + 1;
+        int64_t l_left = root.rankpair(left-1, ROOT_LEFT) + 1;
         int64_t r_left = root.rankpair(right, ROOT_LEFT);
 
-        int64_t l_right = (left == 0) ? 1 : root.rankpair(left-1, ROOT_RIGHT) + 1;
+        int64_t l_right = root.rankpair(left-1, ROOT_RIGHT) + 1;
         int64_t r_right = root.rankpair(right, ROOT_RIGHT);
 
         if (l_left <= r_left) {
@@ -596,16 +576,16 @@ public:
 
     size_t size_in_bytes() const{
         size_t sz = 0; 
-        sz += sizeof(int64_t)*alphabet.capacity();
-        sz += sizeof(int64_t)*char_to_idx.capacity();
+        sz += sizeof(int64_t)*alphabet.size();
+        sz += sizeof(int64_t)*char_to_idx.size();
         sz += root.size_in_bytes();
-        sz += children.capacity() * sizeof(optional<base3_rank_t>);
+        sz += children.size() * sizeof(optional<base3_rank_t>);
         for (const auto&c : children) {
             if (c.has_value()) {
                 sz += c->size_in_bytes();
             }
         }
-        sz += child_intervals.capacity() * sizeof(optional<pair<int64_t, int64_t>>);
+        sz += child_intervals.size() * sizeof(optional<pair<int64_t, int64_t>>);
         return sz;
     }
 
@@ -618,4 +598,14 @@ public:
     }
 
 
+    void analyze_dataset() {
+        std::ofstream out("full_subtree.csv");
+        out << "Node,Count\n";
+        for(int i = 0; i < full_subtree.size(); i++){
+            out << i ;
+            out << "," << full_subtree[i].size();
+            out << "\n";
+        }
+        out.close();
+    }
 };
