@@ -25,6 +25,7 @@ public:
     static const int64_t CHILD_RIGHT = 0; // '01'
     static const int64_t CHILD_LEFT = 1; // '10'
     static const int64_t CHILD_BOTH = 2; // '11'
+    static const int64_t CHILD_ALL = 3; // '?'
 
     vector<int64_t> alphabet;
     vector<int64_t> char_to_idx; // Vector of length 256 mapping characters to their indices in the alphabet
@@ -36,9 +37,7 @@ public:
     vector<optional<base3_rank_t>> children;
 
     // Alphabet intervals of child nodes
-    vector<optional<pair<int64_t, int64_t>>> child_intervals;    
-    vector<vector<int64_t>> full_subtree;
-
+    vector<optional<pair<int64_t, int64_t>>> child_intervals;
 
     perm_rank_t sp;
 private:
@@ -69,7 +68,7 @@ private:
                 alphabet.push_back(c);
             }
         }
-    
+        cout << "Initiated alphabet" << endl;
     }
 
     // Helper function used in the constructor
@@ -110,7 +109,6 @@ private:
 
             if(has_left) sets_to_left.push_back(i);
             if(has_right) sets_to_right.push_back(i);
-            if (has_left & has_right) sets_to_both.push_back(i);
         }
         vector<int64_t>().swap(sets_in_this_child); // Free memory
 
@@ -122,15 +120,6 @@ private:
         int64_t right_idx = get_right_child_idx(child_idx);
         init_children_recursion(left_idx , start          , (start + end)/2, sets, std::move(sets_to_left));
         init_children_recursion(right_idx, (start + end)/2, end            , sets, std::move(sets_to_right));
-        if (!full_subtree[left_idx].empty() && !full_subtree[right_idx].empty()) {
-            vector<int64_t> left_indices = full_subtree[left_idx]; 
-            vector<int64_t> right_indices = full_subtree[right_idx];
-            set_intersection(left_indices.begin(), left_indices.end(), right_indices.begin(), right_indices.end(), back_inserter(full_subtree[child_idx]));
-        }
-        if ((left_idx >= children.size() || !children[left_idx]) && (right_idx >= children.size() || !children[right_idx])) {
-            // cout << "full subtree at child_idx: " << child_idx << endl;
-            full_subtree[child_idx] = sets_to_both;
-        }
     }
 
     // Helper function used in the constructor
@@ -170,7 +159,6 @@ private:
         // Initialize space for the children
         child_intervals.resize(2*sigma);
         children.resize(2*sigma);
-        full_subtree.resize(2*sigma);
 
         // Initialize the children
         init_children_recursion(0, 0, sigma/2, sets, std::move(sets_to_left_child)); // Left child of root
@@ -301,67 +289,6 @@ private:
         }
     }
 
-
-    // void union_helper(int64_t x1, int64_t x2, int64_t child_idx, int64_t start, int64_t end, vector<int64_t>& union_set) {
-    //     std::stack<PairFrame> stk; 
-    //     stk.push({x1, x2, child_idx, start, end}); 
-
-    //     while (!stk.empty()) {
-    //         auto [x1, x2, child_idx, start, end] = stk.top(); stk.pop(); 
-    //         if (child_idx >= children.size() || !children[child_idx]) {
-    //             union_set.insert(union_set.end(), alphabet.begin()+start, alphabet.begin()+end);
-    //             continue;
-    //         }
-    
-    //         const auto& interval = *child_intervals[child_idx];
-    //         int64_t left = interval.first;
-    //         int64_t right = interval.second;
-    
-    //         char child_sym1 = get_child_sym(x1, child_idx);
-    //         char child_sym2 = get_child_sym(x2, child_idx);
-    
-    //         int64_t x1_left = children[child_idx]->rankpair(x1, CHILD_LEFT);
-    //         int64_t x1_right = children[child_idx]->rankpair(x1, CHILD_RIGHT);
-    
-    //         int64_t x2_left = children[child_idx]->rankpair(x2, CHILD_LEFT);
-    //         int64_t x2_right = children[child_idx]->rankpair(x2, CHILD_RIGHT);
-        
-    //         if (child_sym1 == child_sym2) {
-    //             if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_LEFT))  {
-    //                 stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2});
-    //             } 
-    //             if ((child_sym1 == CHILD_BOTH) || (child_sym1 == CHILD_RIGHT)) {
-    //                 stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-    //             }
-    //         } else {
-    //             if (child_sym1 == CHILD_BOTH) {
-    //                 if (child_sym2 == CHILD_LEFT) {
-    //                     stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
-    //                     collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-    //                 } else {// CHILD_RIGHT
-    //                     collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-    //                     stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-    //                 }
-    //             } else if (child_sym1 == CHILD_LEFT) {
-    //                 if (child_sym2 == CHILD_RIGHT) {
-    //                     collect_set_stack(x1_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-    //                 } else { // CHILD_BOTH
-    //                     stk.push({x1_left, x2_left, get_left_child_idx(child_idx), start, (left+right)/2}); 
-    //                 }
-    //                 collect_set_stack(x2_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-    //             } else {
-    //                 collect_set_stack(x2_left, get_left_child_idx(child_idx), start, (left+right)/2, union_set);
-    //                 if (child_sym2 == CHILD_LEFT) {
-    //                     collect_set_stack(x1_right, get_right_child_idx(child_idx), (left+right)/2, end, union_set); 
-    //                 } else { //CHILD_BOTH
-    //                     stk.push({x1_right, x2_right, get_right_child_idx(child_idx), (left+right)/2, end});
-    //                 }
-    //             }
-                
-    //         }
-    //     }
-    // }
-
     void union_range_helper(int64_t child_idx, int64_t l, int64_t r, int64_t start, int64_t end, vector<int64_t>& union_set) const {
         std::stack<PairFrame> stk; 
         stk.push({l, r, child_idx, start, end}); 
@@ -409,7 +336,6 @@ public:
     SubsetWT(const vector<vector<int64_t>>& sets, vector<int64_t> &perm, int64_t total){
         sp = perm_rank_t(perm);
         init_alphabet(sets, total);
-        cout << "Initiated alphabet" << endl;
         init_tree(sets);
     }
 
@@ -489,55 +415,6 @@ public:
 
         return intersection;
     }
-
-    // vector<int64_t> union_two(int64_t pos1, int64_t pos2) {
-    //     vector<int64_t> union_set; 
-
-    //     int64_t start = 0, end = alphabet.size();
-
-    //     int64_t x1_left = root.rankpair(pos1, ROOT_LEFT);
-    //     int64_t x1_right = root.rankpair(pos1, ROOT_RIGHT); 
-
-    //     int64_t x2_left = root.rankpair(pos2, ROOT_LEFT);
-    //     int64_t x2_right = root.rankpair(pos2, ROOT_RIGHT); 
-
-    //     char root_sym1 = get_root_sym(pos1); 
-    //     char root_sym2 = get_root_sym(pos2);
-
-    //     if (root_sym1 == root_sym2) {
-    //         if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_LEFT) {
-    //             union_helper(x1_left, x2_left, 0, start, end/2, union_set);
-    //         } 
-    //         if (root_sym1 == ROOT_BOTH || root_sym1 == ROOT_RIGHT) {
-    //             union_helper(x1_right, x2_right, 1, end/2, end, union_set);
-    //         }
-    //     } else {
-    //         if (root_sym1 == ROOT_BOTH) {
-    //             if (root_sym2 == ROOT_LEFT) {
-    //                 union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
-    //                 collect_set_stack(x1_right, 1, end/2, end, union_set); 
-    //             } else {
-    //                 collect_set_stack(x1_left, 0, start, end/2, union_set); 
-    //                 union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
-    //             }
-    //         } else if (root_sym1 == ROOT_LEFT) {
-    //             if (root_sym2 == ROOT_RIGHT) {
-    //                 collect_set_stack(x1_left, 0, start, end/2, union_set);
-    //             } else {
-    //                 union_helper(x1_left, x2_left, 0, start, end/2, union_set); 
-    //             }
-    //             collect_set_stack(x2_right, 1, end/2, end, union_set); 
-    //         } else {
-    //             collect_set_stack(x2_left, 0, start, end/2, union_set);
-    //             if (root_sym2 == ROOT_LEFT) {
-    //                 collect_set_stack(x1_right, 1, end/2, end, union_set);
-    //             } else {
-    //                 union_helper(x1_right, x2_right, 1, end/2, end, union_set); 
-    //             }
-    //         }
-    //     }
-    //     return union_set;
-    // }
 
     vector<int64_t> union_range(int64_t left, int64_t right) { 
         if (left == right) {
@@ -621,17 +498,5 @@ public:
 
     void load(istream& is){
         return; // TODO
-    }
-
-
-    void analyze_dataset() {
-        std::ofstream out("full_subtree.csv");
-        out << "Node,Count\n";
-        for(int i = 0; i < full_subtree.size(); i++){
-            out << i ;
-            out << "," << full_subtree[i].size();
-            out << "\n";
-        }
-        out.close();
     }
 };
