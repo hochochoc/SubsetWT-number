@@ -21,24 +21,27 @@ public:
     SDSL_WT(const vector<char>& seq){
         // We have to translate 0..sigma-1 to ascii digits for the SDSL wavelet tree because
         // apparently we can't give a zero-byte because that will terminate the string?
-        string ascii;
-        for(char c : seq){
-            ascii.push_back('0' + c);
+        uint8_t bits = ceil(log2(sigma ? sigma : 2));
+        sdsl::int_vector<> iv(seq.size(), 0, bits);
+        for (size_t i = 0; i < seq.size(); ++i) {
+            iv[i] = (seq[i]);
         }
-        sdsl::construct_im(wt, ascii.c_str(), 1); // 1: file format is a sequence, not a serialized sdsl object
+        construct_im(wt, iv);
     }
 
     // Rank of symbol in half-open interval [0..pos)
     int64_t rank(int64_t pos, char symbol) const{
-        uint64_t ans = wt.rank(pos, '0' + symbol); // Translate to ascii for the query
+        uint64_t ans = wt.rank(pos, symbol); // Translate to ascii for the query
         return ans;
     }
 
     // Sum of ranks `symbol` and the last symbol in half-open interval [0..pos)
     int64_t rankpair(int64_t pos, char symbol) const{
-        uint64_t ans = wt.rank(pos, '0' + symbol); // Translate to ascii for the query
-        ans += wt.rank(pos, '0' + (sigma-1)); // Last symbol
-        return ans;
+        // uint64_t ans = wt.rank(pos, '0' + symbol); // Translate to ascii for the query
+        // ans += wt.rank(pos, '0' + (sigma-1)); // Last symbol
+        auto r1 = wt.rank(pos, symbol);
+        auto r2 = wt.rank(pos, (sigma-1));
+        return r1+r2;
     }
 
     size_t size_in_bytes() const{

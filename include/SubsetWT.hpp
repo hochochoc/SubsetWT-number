@@ -12,7 +12,7 @@
 
 using namespace std;
 
-template<typename base4_rank_t, typename base3_rank_t>
+template<typename base4_rank_t, typename base3_rank_t, typename perm_rank_t>
 class SubsetWT{
 
 public:
@@ -40,6 +40,7 @@ public:
     vector<vector<int64_t>> full_subtree;
 
 
+    perm_rank_t sp;
 private:
 
     constexpr int64_t get_left_child_idx(int64_t child_idx) const{
@@ -75,7 +76,6 @@ private:
     // Alphabet must be initialized before calling
     // [start, end) is a half-open interval
     void init_children_recursion(int64_t child_idx, int64_t start, int64_t end, const vector<vector<int64_t>>& sets, vector<int64_t>&& sets_in_this_child){
-
         if(end - start <= 1) {
             return; // Alphabet is singleton or empty
         }
@@ -100,6 +100,9 @@ private:
                 } else if(c >= middle_char && (end == alphabet.size() || c < alphabet[end])){
                     has_right = true;
                 }
+                if (has_left && has_right) {
+                    break;
+                }
             }
             if(has_left & !has_right) split_seq.push_back(CHILD_LEFT);
             else if(!has_left & has_right) split_seq.push_back(CHILD_RIGHT);
@@ -107,9 +110,8 @@ private:
 
             if(has_left) sets_to_left.push_back(i);
             if(has_right) sets_to_right.push_back(i);
-            if (has_left & has_right) sets_to_both.push_back(i+1);
+            if (has_left & has_right) sets_to_both.push_back(i);
         }
-
         vector<int64_t>().swap(sets_in_this_child); // Free memory
 
         // Construct the base-3 rank support
@@ -146,6 +148,9 @@ private:
             // TODO: increase time usage here 
             // color set is sorted 
             for(int64_t c : sets[i]){
+                if (has_left && has_right) {
+                    break;
+                }
                 if(c < middle_char) has_left = true;
                 else has_right = true;
             }
@@ -401,8 +406,10 @@ public:
 
     SubsetWT(){}
 
-    SubsetWT(const vector<vector<int64_t>>& sets, int64_t total){
+    SubsetWT(const vector<vector<int64_t>>& sets, vector<int64_t> &perm, int64_t total){
+        sp = perm_rank_t(perm);
         init_alphabet(sets, total);
+        cout << "Initiated alphabet" << endl;
         init_tree(sets);
     }
 
@@ -564,14 +571,32 @@ public:
 
     vector<int64_t> flat_union(int64_t left, int64_t right) {
         unordered_set<int64_t> result_set;
-    
+
         for (int64_t i = left; i <= right; ++i) {
-            vector<int64_t> current = extract_set(i);
+            const vector<int64_t>& current = extract_set(i);
             result_set.insert(current.begin(), current.end());
         }
-    
-        // Optional: return as vector
-        return vector<int64_t>(result_set.begin(), result_set.end());
+
+        vector<int64_t> result(result_set.begin(), result_set.end());
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
+    vector<int64_t> flat_intersect_two(int64_t left, int64_t right) {
+        const vector<int64_t>& set1 = extract_set(left);
+        const vector<int64_t>& set2 = extract_set(right);
+
+        unordered_set<int64_t> set1_hash(set1.begin(), set1.end());
+        vector<int64_t> result;
+
+        for (int64_t val : set2) {
+            if (set1_hash.count(val)) {
+                result.push_back(val);
+            }
+        }
+
+        std::sort(result.begin(), result.end());
+        return result;
     }
 
     size_t size_in_bytes() const{
@@ -586,6 +611,7 @@ public:
             }
         }
         sz += child_intervals.size() * sizeof(optional<pair<int64_t, int64_t>>);
+        sz += sp.size_in_bytes();
         return sz;
     }
 
