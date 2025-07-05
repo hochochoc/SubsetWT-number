@@ -44,6 +44,16 @@ public:
         return r1+r2;
     }
 
+    // int64_t rankpair(int64_t pos, char symbol) const{
+    //     auto r = wt.rank(pos, symbol) + wt.rank(pos, 0);
+    //     if (symbol == sigma - 1) {
+    //         return r;
+    //     } else if (symbol > 0) {
+    //         return r + wt.rank(pos, sigma-1);
+    //     }
+    //     return wt.rank(pos, symbol);
+    // }
+
     size_t size_in_bytes() const{
         return sdsl::size_in_bytes(wt) + sizeof(sigma);
     }

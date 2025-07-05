@@ -83,7 +83,8 @@ vector<pair<int, int>> load_queries_50() {
 }
 
 vector<vector<int64_t>> load_color_sets() {
-    string filename = "output.bin";
+    string filename = "/scratch/project_2014447/coli3682-binary-color-dump.bin";
+    // string filename = "output.bin";
     ifstream file(filename, ios::binary);
     vector<vector<int64_t>> colorSets;
 
@@ -155,7 +156,9 @@ long long time_function(Func f) {
 }
 
 pair<vector<int64_t>, vector<vector<int64_t>>> load_reordered_colors() {
-    string filename = "result.bin";
+    string filename = "/scratch/project_2014447/result.bin";
+    // string filename = "result.bin";
+
     ifstream file(filename, ios::binary);
 
     vector<int64_t> perm;
@@ -230,10 +233,10 @@ vector<int64_t> convert(vector<int64_t> perm, vector<int64_t> reorderColors) {
 int main() {
 
     // // Define the types of the four main variants   
-    typedef SubsetWT<SDSL_WT<sdsl::wt_int<>, 4>, SDSL_WT<sdsl::wt_int<>, 3>, SuccinctPerm> nested_wt_t;
-    typedef SubsetWT<RRR_Generalization<4>, RRR_Generalization<3>, SuccinctPerm> rrr_generalization_t;
-    typedef SubsetWT<SplitStructure<4>, SplitStructure<3>, SuccinctPerm> split_t;
-    typedef SubsetWT<BitMagic<4>, BitMagic<3>, SuccinctPerm> bitmagic_t;
+    typedef SubsetWT<SDSL_WT<sdsl::wt_int<>, 4>, SuccinctPerm> nested_wt_t;
+    typedef SubsetWT<RRR_Generalization<4>, SuccinctPerm> rrr_generalization_t;
+    // typedef SubsetWT<SplitStructure<4>, SplitStructure<3>, SuccinctPerm> split_t;
+    // typedef SubsetWT<BitMagic<4>, BitMagic<3>, SuccinctPerm> bitmagic_t;
 
 
     vector<vector<int64_t>> colorsets = load_color_sets(); // orginal color sets
@@ -286,7 +289,7 @@ int main() {
         extraction_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average extraction time: " << total_extraction_time/queries.size() << endl;
-    std::ofstream eout("extract_plot_data_rrr_reordered.csv");
+    std::ofstream eout("extract_plot_data_rrr_all_reordered.csv");
     eout << "result_size,time_micros\n";
     for (const auto& [size, time] : extraction_data_points) {
              eout << size << "," << time << "\n";
@@ -308,7 +311,7 @@ int main() {
         intersection_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average intersection time: " << total_i_time/queries.size() << endl;
-    std::ofstream out("intersect_plot_data_rrr_reordered.csv");
+    std::ofstream out("intersect_plot_data_rrr_all_reordered.csv");
     out << "result_size,time_micros\n";
     for (const auto& [size, time] : intersection_data_points) {
         out << size << "," << time << "\n";
@@ -329,7 +332,7 @@ int main() {
         ur_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average union range time: " << total_ur_time/queries.size() << endl;
-    std::ofstream urout("ur_plot_data_rrr_reordered.csv");
+    std::ofstream urout("ur_plot_data_rrr_all_reordered.csv");
     urout << "result_size,time_micros\n";
     for (const auto& [size, time] : ur_data_points) {
         urout << size << "," << time << "\n";
