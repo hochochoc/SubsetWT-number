@@ -71,63 +71,80 @@ private:
     
     }
 
+    struct Task {
+        int64_t child_idx;
+        int64_t start, end;
+        vector<int64_t> sets_in_this_child;
+        Task(int64_t cidx, int64_t s, int64_t e, vector<int64_t> &&sets) 
+            : child_idx(cidx), start(s), end(e), sets_in_this_child(std::move(sets)) {}
+    };
+
     // Helper function used in the constructor
     // Alphabet must be initialized before calling
     // [start, end) is a half-open interval
     void init_children_recursion(int64_t child_idx, int64_t start, int64_t end, const vector<vector<int64_t>>& sets, vector<int64_t>&& sets_in_this_child){
+        stack<Task> task_stack;
 
-        if(end - start <= 1) {
-            return; // Alphabet is singleton or empty
-        }
+        task_stack.emplace(child_idx, start, end, std::move(sets_in_this_child));
 
-        child_intervals[child_idx] = {start,end};
+        while (!task_stack.empty()) 
+        {
+            /* code */
+            Task task = std::move(task_stack.top());
+            task_stack.pop();
 
-        int64_t middle_char = alphabet[(start + end)/2];
-        // [start, midpoint) go left, [midpoint, end) go right
+            if (task.end - task.start <=1) continue;
 
-        // Set indexes that go to left and to right
-        vector<int64_t> sets_to_left, sets_to_right, sets_to_both;
+            int64_t child_idx = task.child_idx;
+            int64_t start = task.start;
+            int64_t end = task.end;
 
-        vector<char> split_seq; // 0 = left, 1 = right, 2 = both
+            child_intervals[child_idx] = {start, end};
+            int64_t middle_char = alphabet[(start+end)/2];
 
-        // Split the alphabet
-        for(int64_t i : sets_in_this_child){
-            bool has_left = false;
-            bool has_right = false;
-            for(int64_t c : sets[i]){
-                if(c >= alphabet[start] && c < middle_char){
-                    has_left = true;
-                } else if(c >= middle_char && (end == alphabet.size() || c < alphabet[end])){
-                    has_right = true;
+            vector<int64_t> sets_to_left, sets_to_right;
+            vector<char> split_seq;
+
+            // Split the alphabet
+            for(int64_t i : task.sets_in_this_child){
+                bool has_left = false;
+                bool has_right = false;
+                for(int64_t c : sets[i]){
+                    if(c >= alphabet[start] && c < middle_char){
+                        has_left = true;
+                    } else if(c >= middle_char && (end == alphabet.size() || c < alphabet[end])){
+                        has_right = true;
+                    }
+                    if (has_left && has_right) break;
                 }
+                if(has_left && !has_right) split_seq.push_back(CHILD_LEFT);
+                else if(!has_left && has_right) split_seq.push_back(CHILD_RIGHT);
+                else split_seq.push_back(CHILD_BOTH);
+
+                if(has_left) sets_to_left.push_back(i);
+                if(has_right) sets_to_right.push_back(i);
             }
-            if(has_left & !has_right) split_seq.push_back(CHILD_LEFT);
-            else if(!has_left & has_right) split_seq.push_back(CHILD_RIGHT);
-            else split_seq.push_back(CHILD_BOTH);
 
-            if(has_left) sets_to_left.push_back(i);
-            if(has_right) sets_to_right.push_back(i);
-            if (has_left & has_right) sets_to_both.push_back(i+1);
-        }
+            vector<int64_t>().swap(task.sets_in_this_child);
 
-        vector<int64_t>().swap(sets_in_this_child); // Free memory
+            children[child_idx] = base3_rank_t(split_seq);
 
-        // Construct the base-3 rank support
-        children[child_idx] = base3_rank_t(split_seq);
+            vector<char>().swap(split_seq);
+   
+            int64_t left_idx = get_left_child_idx(child_idx);
+            int64_t right_idx = get_right_child_idx(child_idx);
 
-        // Recurse to children
-        int64_t left_idx = get_left_child_idx(child_idx);
-        int64_t right_idx = get_right_child_idx(child_idx);
-        init_children_recursion(left_idx , start          , (start + end)/2, sets, std::move(sets_to_left));
-        init_children_recursion(right_idx, (start + end)/2, end            , sets, std::move(sets_to_right));
-        if (!full_subtree[left_idx].empty() && !full_subtree[right_idx].empty()) {
-            vector<int64_t> left_indices = full_subtree[left_idx]; 
-            vector<int64_t> right_indices = full_subtree[right_idx];
-            set_intersection(left_indices.begin(), left_indices.end(), right_indices.begin(), right_indices.end(), back_inserter(full_subtree[child_idx]));
-        }
-        if ((left_idx >= children.size() || !children[left_idx]) && (right_idx >= children.size() || !children[right_idx])) {
-            // cout << "full subtree at child_idx: " << child_idx << endl;
-            full_subtree[child_idx] = sets_to_both;
+            if (left_idx < children.size() && !sets_to_left.empty()) {
+                task_stack.emplace(left_idx, start, (start+end)/2, std::move(sets_to_left));
+            }
+            if (right_idx < children.size() && !sets_to_right.empty()) {
+                task_stack.emplace(right_idx, (start+end)/2, end, std::move(sets_to_right));
+            }
+            
+            vector<int64_t>().swap(task.sets_in_this_child);
+            vector<char>().swap(split_seq);
+            vector<int64_t>().swap(sets_to_left);
+            vector<int64_t>().swap(sets_to_right);
         }
     }
 
@@ -148,6 +165,7 @@ private:
             for(int64_t c : sets[i]){
                 if(c < middle_char) has_left = true;
                 else has_right = true;
+                if (has_left && has_right) break;
             }
 
             if(!has_left && !has_right) root_split_seq.push_back(ROOT_NONE);
@@ -165,7 +183,6 @@ private:
         // Initialize space for the children
         child_intervals.resize(2*sigma);
         children.resize(2*sigma);
-        full_subtree.resize(2*sigma);
 
         // Initialize the children
         init_children_recursion(0, 0, sigma/2, sets, std::move(sets_to_left_child)); // Left child of root

@@ -50,7 +50,7 @@ vector<pair<int, int>> load_queries() {
 }
 
 vector<vector<int64_t>> load_color_sets() {
-    string filename = "output.bin";
+    string filename = "/scratch/project_2014447/coli3682-binary-color-dump.bin";
     ifstream file(filename, ios::binary);
     vector<vector<int64_t>> colorSets;
 
@@ -79,7 +79,7 @@ vector<vector<int64_t>> load_color_sets() {
     file.close();
 
     // Print the first few color sets for verification
-     cout << "Read " << colorSets.size() << " color sets.\n";
+    cout << "Read " << colorSets.size() << " color sets.\n";
     for (size_t i = 0; i < min(colorSets.size(), size_t(2)); i++) { // Print first 3 sets
         // cout << "Set " << i + 1 << " (size: " << colorSets[i].size() << "): ";
         for (size_t j = 0; j < min(colorSets[i].size(), size_t(10)); j++) { // Print first 10 colors
@@ -90,6 +90,7 @@ vector<vector<int64_t>> load_color_sets() {
         // }
         cout << "...\n";
     }
+    cout << endl;
     return colorSets;
 }
 
@@ -117,36 +118,10 @@ int main() {
     vector<vector<int64_t>> colorSets = load_color_sets();
     
     int64_t t0 = current_time_micros();
-    rrr_generalization_t sswt(colorSets, 7000);
+    nested_wt_t sswt(colorSets, 7000);
     int64_t t1 = current_time_micros();
     cout << "Tree building time: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
-
-    // Intersect and union
-    int64_t total_time_micros_intersect = 0;
-    int64_t total_time_micros_union = 0;
-    int64_t total_time_micros_union_range = 0;
-    vector<pair<int, int>> intersect_queries = load_queries();
-    for (const auto& p : intersect_queries) {
-        t0 = current_time_micros();
-        sswt.intersect(p.first, p.second);
-        t1 = current_time_micros();
-        total_time_micros_intersect += t1 - t0; 
-
-        t0 = current_time_micros();
-        sswt.union_two(p.first, p.second);
-        t1 = current_time_micros();
-        total_time_micros_union += t1 - t0; 
-
-        t0 = current_time_micros();
-        sswt.union_range(p.first, p.second);
-        t1 = current_time_micros();
-        total_time_micros_union_range += t1 - t0; 
-    }
-    
-    cout << "Intersection Time: " << (double)(total_time_micros_intersect) / intersect_queries.size() << " us/query" << endl;
-    cout << "Union Time: " << (double)(total_time_micros_union) / intersect_queries.size() << " us/query" << endl;
-    cout << "Union Time, gap=50: " << (double)(total_time_micros_union_range) / intersect_queries.size() << " us/query" << endl;
 
     return 0;
 }
