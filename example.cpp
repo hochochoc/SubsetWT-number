@@ -24,7 +24,7 @@ int64_t current_time_nanos(){
 
 int main(){
     // Define the types of the four main variants   
-    typedef SubsetWT<SDSL_WT<sdsl::wt_int<>, 4>, SuccinctPerm> nested_wt_t;
+    typedef SubsetWT<SDSL_WT<sdsl::wt_hutu<>, 4>, SuccinctPerm> nested_wt_t;
     typedef SubsetWT<RRR_Generalization<4>, SuccinctPerm> rrr_generalization_t;
     typedef SubsetWT<SplitStructure<4>, SuccinctPerm> split_t;
     typedef SubsetWT<BitMagic<4>, SuccinctPerm> bitmagic_t;
@@ -54,7 +54,7 @@ int main(){
     // }
     
 
-    rrr_generalization_t sswt(sets, perm, 13);
+    nested_wt_t sswt(sets, perm, 13);
 
     cout << "Size: " << sswt.size_in_bytes() << endl;
 

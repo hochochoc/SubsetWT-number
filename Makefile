@@ -1,7 +1,7 @@
 .PHONY: example tests
 
 example:
-	g++-10 example.cpp ./sdsl-lite/build/lib/libsdsl.a -std=c++20 -I sdsl-lite/include/ -O3 -I include -I ./sdsl-lite/build/external/libdivsufsort/include/ -g -o example -Wno-deprecated-declarations
+	g++-10 -fsanitize=address example.cpp ./sdsl-lite/build/lib/libsdsl.a -std=c++20 -I sdsl-lite/include/ -O3 -I include -I ./sdsl-lite/build/external/libdivsufsort/include/ -g -o example -Wno-deprecated-declarations
 
 tests:
 	g++-10 tests.cpp ./sdsl-lite/build/lib/libsdsl.a -std=c++20 -I sdsl-lite/include/ -I include -I ./sdsl-lite/build/external/libdivsufsort/include/ -g -o tests -Wno-deprecated-declarations
