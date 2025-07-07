@@ -7,6 +7,9 @@
 #include <chrono>
 #include <fstream>
 
+#include <cassert>
+
+
 int32_t readInt32LE(ifstream &file) {
     uint8_t bytes[4];
     file.read(reinterpret_cast<char*>(bytes), 4);
@@ -25,7 +28,7 @@ vector<pair<int, int>> load_queries() {
     int64_t n_queries = 0;
     // load queries 
     vector<pair<int, int>> number_pairs;
-    ifstream file("output.txt");
+    ifstream file("union_range_10.txt");
     if (!file) {
         cerr << "Error opening file!" << endl;
         return number_pairs;
@@ -37,15 +40,14 @@ vector<pair<int, int>> load_queries() {
     while (getline(file, line)) {
         stringstream ss(line);
         int a, b;
-        char comma;
 
-        if (ss >> a >> comma >> b) { // Read two integers separated by a comma
+        if (ss >> a >> b) { // Read two integers separated by a comma
             number_pairs.emplace_back(a, b);
         }
     }
 
     file.close();
-    cout << "Loaded " << number_pairs.size() << " pairs from file:\n";
+    cout << "Loaded " << number_pairs.size() << " pairs from file.\n";
     return number_pairs;
 }
 
@@ -118,10 +120,74 @@ int main() {
     vector<vector<int64_t>> colorSets = load_color_sets();
     
     int64_t t0 = current_time_micros();
-    nested_wt_t sswt(colorSets, 7000);
+    rrr_generalization_t sswt(colorSets, 7000);
     int64_t t1 = current_time_micros();
-    cout << "Tree building time: " << (double)(t1-t0) << " us" << endl;
+    cout << "Tree building time RRR: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
 
+
+    vector<pair<int, int>> queries = load_queries();
+    uint64_t total_extraction_time = 0;
+    std::vector<std::pair<size_t, uint64_t>> extraction_data_points; // (result size, time in microseconds)
+    for (const auto& p : queries) {
+        t0 = current_time_micros();
+        vector<int64_t> result = sswt.extract_set(p.first);
+        t1 = current_time_micros();
+        assert (colorSets[p.first-1] == result);
+
+        uint64_t time_micros = (t1 - t0); // convert to microseconds
+        total_extraction_time += time_micros;
+        extraction_data_points.emplace_back(result.size(), time_micros);
+    }
+    cout << "Average extraction time: " << total_extraction_time/queries.size() << endl;
+    std::ofstream eout("extract_plot_data_rrr_org.csv");
+    eout << "result_size,time_micros\n";
+    for (const auto& [size, time] : extraction_data_points) {
+             eout << size << "," << time << "\n";
+    }
+    eout.close();
+
+    // // Intersect and union
+    uint64_t total_i_time = 0;
+    std::vector<std::pair<size_t, uint64_t>> intersection_data_points; // (result size, time in microseconds)
+    for (const auto& p : queries) {
+        t0 = current_time_micros();
+        vector<int64_t> result = sswt.intersect(p.first, p.second);
+        t1 = current_time_micros();
+
+        assert(sswt.flat_intersect_two(p.first, p.second) == result);
+
+        uint64_t time_micros = (t1 - t0); // convert to microseconds
+        total_i_time += time_micros;
+        intersection_data_points.emplace_back(result.size(), time_micros);
+    }
+    cout << "Average intersection time: " << total_i_time/queries.size() << endl;
+    std::ofstream out("intersect_plot_data_rrr_org.csv");
+    out << "result_size,time_micros\n";
+    for (const auto& [size, time] : intersection_data_points) {
+        out << size << "," << time << "\n";
+    }
+    out.close();
+
+    uint64_t total_ur_time = 0;
+    std::vector<std::pair<size_t, uint64_t>> ur_data_points; // (result size, time in microseconds)
+    for (const auto& p : queries) {
+        t0 = current_time_micros();
+        vector<int64_t> result = sswt.union_range(p.first, p.second);
+        t1 = current_time_micros();
+
+        assert(sswt.flat_union(p.first, p.second) == result);
+
+        uint64_t time_micros = (t1 - t0);
+        total_ur_time += time_micros;
+        ur_data_points.emplace_back(result.size(), time_micros);
+    }
+    cout << "Average union range time: " << total_ur_time/queries.size() << endl;
+    std::ofstream urout("ur_plot_data_rrr_org.csv");
+    urout << "result_size,time_micros\n";
+    for (const auto& [size, time] : ur_data_points) {
+        urout << size << "," << time << "\n";
+    }
+    urout.close();
     return 0;
 }

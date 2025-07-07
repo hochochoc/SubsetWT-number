@@ -36,8 +36,7 @@ public:
     vector<optional<base3_rank_t>> children;
 
     // Alphabet intervals of child nodes
-    vector<optional<pair<int64_t, int64_t>>> child_intervals;    
-    vector<vector<int64_t>> full_subtree;
+    vector<optional<pair<int64_t, int64_t>>> child_intervals;
 
 
 private:
@@ -579,18 +578,6 @@ public:
         return union_set;
     }
 
-    vector<int64_t> flat_union(int64_t left, int64_t right) {
-        unordered_set<int64_t> result_set;
-    
-        for (int64_t i = left; i <= right; ++i) {
-            vector<int64_t> current = extract_set(i);
-            result_set.insert(current.begin(), current.end());
-        }
-    
-        // Optional: return as vector
-        return vector<int64_t>(result_set.begin(), result_set.end());
-    }
-
     size_t size_in_bytes() const{
         size_t sz = 0; 
         sz += sizeof(int64_t)*alphabet.size();
@@ -606,6 +593,36 @@ public:
         return sz;
     }
 
+    vector<int64_t> flat_union(int64_t left, int64_t right) {
+        unordered_set<int64_t> result_set;
+
+        for (int64_t i = left; i <= right; ++i) {
+            const vector<int64_t>& current = extract_set(i);
+            result_set.insert(current.begin(), current.end());
+        }
+
+        vector<int64_t> result(result_set.begin(), result_set.end());
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
+    vector<int64_t> flat_intersect_two(int64_t left, int64_t right) {
+        const vector<int64_t>& set1 = extract_set(left);
+        const vector<int64_t>& set2 = extract_set(right);
+
+        unordered_set<int64_t> set1_hash(set1.begin(), set1.end());
+        vector<int64_t> result;
+
+        for (int64_t val : set2) {
+            if (set1_hash.count(val)) {
+                result.push_back(val);
+            }
+        }
+
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
     int64_t serialize(ostream& os) const{
         return 0; // TODO
     }
@@ -614,15 +631,4 @@ public:
         return; // TODO
     }
 
-
-    void analyze_dataset() {
-        std::ofstream out("full_subtree.csv");
-        out << "Node,Count\n";
-        for(int i = 0; i < full_subtree.size(); i++){
-            out << i ;
-            out << "," << full_subtree[i].size();
-            out << "\n";
-        }
-        out.close();
-    }
 };
