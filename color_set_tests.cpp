@@ -2,7 +2,8 @@
 #include "RRR_generalization.hpp"
 #include "SplitStructure.hpp"
 #include "BitMagic.hpp"
-#include "SDSL_WT.hpp"   
+#include "SDSL_WT.hpp"  
+#include "SuccinctPerm.hpp" 
 
 #include <chrono>
 #include <fstream>
@@ -96,6 +97,68 @@ vector<vector<int64_t>> load_color_sets() {
     return colorSets;
 }
 
+pair<vector<int64_t>, vector<vector<int64_t>>> load_reordered_colors() {
+    string filename = "/scratch/project_2014447/result.bin";
+    // string filename = "result.bin";
+
+    ifstream file(filename, ios::binary);
+
+    vector<int64_t> perm;
+    vector<vector<int64_t>> colorSets;
+
+    if (!file) {
+        cerr << "Failed to open file" << endl;
+        return {perm, colorSets};
+    }
+
+    // Read number of docs (colors)
+    uint64_t num_docs = 0;
+    file.read(reinterpret_cast<char*>(&num_docs), sizeof(num_docs));
+    if (!file) {
+        cerr << "Failed to read doc count" << endl;
+        return {perm, colorSets};
+    }
+
+    // Resize vector to hold all org_ids
+    perm.resize(num_docs);
+
+    // Read org_ids
+    file.read(reinterpret_cast<char*>(perm.data()), num_docs * sizeof(uint64_t));
+    if (!file) {
+        cerr << "Failed to read org_ids" << endl;
+        perm.clear();
+        return {perm, colorSets};
+    }
+
+    // // Read postings lists (colors)
+    // while (file.peek() != EOF) {
+    //     uint64_t num_colors = 0;
+    //     file.read(reinterpret_cast<char*>(&num_colors), sizeof(num_colors));
+    //     if (!file) {
+    //         break; // graceful end-of-file or error
+    //     }
+
+    //     vector<int64_t> colors;
+    //     colors.resize(num_colors);  // << this is the fix
+
+    //     file.read(reinterpret_cast<char*>(colors.data()), num_colors * sizeof(uint64_t));
+    //     if (!file) {
+    //         cerr << "Failed to read colors" << endl;
+    //         perm.clear();
+    //         colorSets.clear();
+    //         return {perm, colorSets};
+    //     }
+
+    //     colorSets.push_back(move(colors));
+    // }
+
+    file.close();
+
+    cout << "Number of colors: " << perm.size() << endl;
+
+    return {perm, colorSets};
+}
+
 vector<int64_t> randomize_1000() {
     vector<int64_t> queries(1000);
     random_device rd;
@@ -108,21 +171,59 @@ vector<int64_t> randomize_1000() {
     return queries;
 }
 
+vector<int64_t> convert(vector<int64_t> perm, vector<int64_t> reorderColors) {
+    vector<int64_t> orginalColorSet;
+    orginalColorSet.reserve(reorderColors.size());
+    for (int64_t c : reorderColors) {
+        int64_t orgColorCode = perm[c];
+        orginalColorSet.push_back(orgColorCode);
+    }
+
+    std::sort(orginalColorSet.begin(), orginalColorSet.end());
+    return orginalColorSet;
+}
+
 int main() {
 
     // Define the types of the four main variants   
     typedef SubsetWT<SDSL_WT<sdsl::wt_hutu<>, 4>, SDSL_WT<sdsl::wt_hutu<>, 3>> nested_wt_t;
     typedef SubsetWT<RRR_Generalization<4>, RRR_Generalization<3>> rrr_generalization_t;
-    typedef SubsetWT<SplitStructure<4>, SplitStructure<3>> split_t;
-    typedef SubsetWT<BitMagic<4>, BitMagic<3>> bitmagic_t;
 
     // Load color sets
-    vector<vector<int64_t>> colorSets = load_color_sets();
+    vector<vector<int64_t>> colorsets = load_color_sets();
+    pair<vector<int64_t>, vector<vector<int64_t>>> reordered = load_reordered_colors(); 
+    vector<int64_t> perm = reordered.first;
+    SuccinctPerm p = SuccinctPerm(perm); // permutation of colors [orginal color code 1, orginal color code 2, ...] 0-based index
+
+    // new subsets after reordering the colors
+    vector<vector<int64_t>> reorderedColorSets;
+    reorderedColorSets.resize(colorsets.size());
+
+    for (size_t i = 0; i < colorsets.size(); i++) {
+        vector<int64_t>& originalColorSet = colorsets[i];
+        vector<int64_t>& reorderedSet = reorderedColorSets[i];
+
+        reorderedSet.reserve(originalColorSet.size());
+
+        std::transform(
+            originalColorSet.begin(), originalColorSet.end(),
+            std::back_inserter(reorderedSet),
+            [&p](int64_t code) { return p.inverse(code); }
+        );
+
+        std::sort(reorderedSet.begin(), reorderedSet.end());
+    }
+
+    vector<int64_t> convertBack = convert(perm, reorderedColorSets[0]);
+
+    assert(convertBack == colorsets[0]);
+
+    cout << "Num of docs: " << reorderedColorSets.size() << endl;
     
     int64_t t0 = current_time_micros();
-    rrr_generalization_t sswt(colorSets, 7000);
+    rrr_generalization_t sswt(colorsets, 3682);
     int64_t t1 = current_time_micros();
-    cout << "Tree building time RRR: " << (double)(t1-t0) << " us" << endl;
+    cout << "Tree building time RRR after reordered: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
 
 
@@ -132,15 +233,16 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.extract_set(p.first);
+        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
-        assert (colorSets[p.first-1] == result);
+        assert (colorsets[p.first] == result);
 
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_extraction_time += time_micros;
         extraction_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average extraction time: " << total_extraction_time/queries.size() << endl;
-    std::ofstream eout("extract_plot_data_rrr_org.csv");
+    std::ofstream eout("extract_plot_data_rrr_reordered.csv");
     eout << "result_size,time_micros\n";
     for (const auto& [size, time] : extraction_data_points) {
              eout << size << "," << time << "\n";
@@ -153,16 +255,17 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.intersect(p.first, p.second);
+        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
 
         assert(sswt.flat_intersect_two(p.first, p.second) == result);
-
+        
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_i_time += time_micros;
         intersection_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average intersection time: " << total_i_time/queries.size() << endl;
-    std::ofstream out("intersect_plot_data_rrr_org.csv");
+    std::ofstream out("intersect_plot_data_rrr_reordered.csv");
     out << "result_size,time_micros\n";
     for (const auto& [size, time] : intersection_data_points) {
         out << size << "," << time << "\n";
@@ -174,6 +277,7 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.union_range(p.first, p.second);
+        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
 
         assert(sswt.flat_union(p.first, p.second) == result);
@@ -183,7 +287,7 @@ int main() {
         ur_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average union range time: " << total_ur_time/queries.size() << endl;
-    std::ofstream urout("ur_plot_data_rrr_org.csv");
+    std::ofstream urout("ur_plot_data_rrr_reordered.csv");
     urout << "result_size,time_micros\n";
     for (const auto& [size, time] : ur_data_points) {
         urout << size << "," << time << "\n";
