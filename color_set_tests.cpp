@@ -221,7 +221,7 @@ int main() {
     cout << "Num of docs: " << reorderedColorSets.size() << endl;
     
     int64_t t0 = current_time_micros();
-    rrr_generalization_t sswt(colorsets, 3682);
+    rrr_generalization_t sswt(reorderedColorSets, 3682);
     int64_t t1 = current_time_micros();
     cout << "Tree building time RRR after reordered: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
@@ -235,7 +235,8 @@ int main() {
         vector<int64_t> result = sswt.extract_set(p.first);
         vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
-        assert (colorsets[p.first] == result);
+        assert (reorderedColorSets[p.first-1] == result);
+        assert (colorsets[p.first-1] == oresult);
 
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_extraction_time += time_micros;
