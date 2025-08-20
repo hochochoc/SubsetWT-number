@@ -3,6 +3,7 @@
 #include "SplitStructure.hpp"
 #include "BitMagic.hpp"
 #include "SDSL_WT.hpp"   
+#include "SuccinctPerm.hpp"
 
 int main(){
 
@@ -22,9 +23,50 @@ int main(){
     // cout << "rank(" << pos << "," << symbol << ") = " << sswt.rank(pos, symbol) << endl;
 
     // numbers
-    vector<vector<int64_t>> sets = {{1, 2, 3}, {2, 3, 4}, {1, 2, 5}, {5}, {10}, {1, 4}, {11, 12}, {5, 10, 11}, {1, 3, 5}};
+    vector<vector<int64_t>> sets = {{1, 2, 3, 4}, {2, 3, 4}, {1, 2, 5}, {5}, {10}, {1, 4}, {11, 12}, {1, 5, 10, 11, 12}, {1, 3, 5}};
+    vector<int64_t> perm = {0, 5, 1, 9, 12, 2, 3, 8, 6, 7, 10, 11, 4, 11}; // 0-based indices
+
+    SuccinctPerm p = SuccinctPerm(perm); // permutation of colors [orginal color code 1, orginal color code 2, ...] 0-based index
+
+    vector<vector<int64_t>> reorderedColorSets;
+    reorderedColorSets.resize(sets.size());
+
+    for (size_t i = 0; i < sets.size(); i++) {
+        vector<int64_t>& originalColorSet = sets[i];
+        vector<int64_t>& reorderedSet = reorderedColorSets[i];
+
+        reorderedSet.reserve(originalColorSet.size());
+
+        std::transform(
+            originalColorSet.begin(), originalColorSet.end(),
+            std::back_inserter(reorderedSet),
+            [&p](int64_t code) { return p.inverse(code); }
+        );
+
+        std::sort(reorderedSet.begin(), reorderedSet.end());
+    }
+
     rrr_generalization_t sswt(sets, 13);
 
+    for (size_t i=1; i<=sets.size(); i++){
+        vector<int64_t> extract = sswt.extract_set(i);
+        for (const auto& val : extract) {
+            cout << val << " "; 
+        }
+        cout << endl;
+
+        assert (extract==sets[i-1]);
+
+        for (size_t j=i; j<sets.size(); j++) {
+            vector<int64_t> intersection_set = sswt.intersect(i, j);
+            vector<int64_t> flat_i_set = sswt.flat_intersect_two(i, j);
+            assert (intersection_set == flat_i_set);
+
+            vector<int64_t> union_set = sswt.union_range(i, j);
+            vector<int64_t> flat_union_set = sswt.flat_union(i, j);
+            assert (union_set==flat_union_set);
+        }
+    } 
 
     vector<int64_t> union_set = sswt.union_range(5, 8);
     for (const auto& val : union_set) {

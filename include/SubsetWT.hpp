@@ -103,32 +103,29 @@ private:
 
             vector<int64_t> sets_to_left, sets_to_right;
             vector<char> split_seq;
+            split_seq.reserve(task.sets_in_this_child.size());
 
             // Split the alphabet
             for(int64_t i : task.sets_in_this_child){
-                bool has_left = false;
-                bool has_right = false;
-                for(int64_t c : sets[i]){
-                    if(c >= alphabet[start] && c < middle_char){
-                        has_left = true;
-                    } else if(c >= middle_char && (end == alphabet.size() || c < alphabet[end])){
-                        has_right = true;
-                    }
-                    if (has_left && has_right) break;
-                }
-                if(has_left && !has_right) split_seq.push_back(CHILD_LEFT);
-                else if(!has_left && has_right) split_seq.push_back(CHILD_RIGHT);
-                else split_seq.push_back(CHILD_BOTH);
+                const auto& s = sets[i];
 
-                if(has_left) sets_to_left.push_back(i);
-                if(has_right) sets_to_right.push_back(i);
+                // Find boundaries with lower_bound
+                auto itL = std::lower_bound(s.begin(), s.end(), alphabet[start]);
+                auto itM = std::lower_bound(s.begin(), s.end(), middle_char);
+                auto itR = std::lower_bound(s.begin(), s.end(), (end == alphabet.size() ? std::numeric_limits<int64_t>::max() : alphabet[end]));
+
+                bool has_left = itL != itM;   // any elements in [start, middle)
+                bool has_right = itM != itR;  // any elements in [middle, end)
+
+                if (has_left && !has_right) split_seq.push_back(CHILD_LEFT);
+                else if (!has_left && has_right) split_seq.push_back(CHILD_RIGHT);
+                else if (has_left && has_right) split_seq.push_back(CHILD_BOTH);
+
+                if (has_left) sets_to_left.push_back(i);
+                if (has_right) sets_to_right.push_back(i);
             }
 
-            vector<int64_t>().swap(task.sets_in_this_child);
-
             children[child_idx] = base3_rank_t(split_seq);
-
-            vector<char>().swap(split_seq);
    
             int64_t left_idx = get_left_child_idx(child_idx);
             int64_t right_idx = get_right_child_idx(child_idx);
@@ -139,11 +136,6 @@ private:
             if (right_idx < children.size() && !sets_to_right.empty()) {
                 task_stack.emplace(right_idx, (start+end)/2, end, std::move(sets_to_right));
             }
-            
-            vector<int64_t>().swap(task.sets_in_this_child);
-            vector<char>().swap(split_seq);
-            vector<int64_t>().swap(sets_to_left);
-            vector<int64_t>().swap(sets_to_right);
         }
     }
 
@@ -156,24 +148,24 @@ private:
         // Initialize the root
         vector<char> root_split_seq;
         vector<int64_t> sets_to_left_child, sets_to_right_child;
+        root_split_seq.reserve(sets.size());
         for(int64_t i = 0; i < sets.size(); i++){
-            bool has_left = false;
-            bool has_right = false;
-            // TODO: increase time usage here 
-            // color set is sorted 
-            for(int64_t c : sets[i]){
-                if(c < middle_char) has_left = true;
-                else has_right = true;
-                if (has_left && has_right) break;
-            }
+            const auto& s = sets[i];
 
-            if(!has_left && !has_right) root_split_seq.push_back(ROOT_NONE);
-            else if(has_left && !has_right) root_split_seq.push_back(ROOT_LEFT);
-            else if(!has_left && has_right) root_split_seq.push_back(ROOT_RIGHT);
-            else if(has_left && has_right) root_split_seq.push_back(ROOT_BOTH);
+            auto itL = std::lower_bound(s.begin(), s.end(), alphabet[0]);
+            auto itM = std::lower_bound(s.begin(), s.end(), middle_char);
+            auto itR = std::lower_bound(s.begin(), s.end(), alphabet[sigma - 1] + 1);
 
-            if(has_left) sets_to_left_child.push_back(i);
-            if(has_right) sets_to_right_child.push_back(i);
+            bool has_left = itL != itM;
+            bool has_right = itM != itR;
+
+            if (!has_left && !has_right) root_split_seq.push_back(ROOT_NONE);
+            else if (has_left && !has_right) root_split_seq.push_back(ROOT_LEFT);
+            else if (!has_left && has_right) root_split_seq.push_back(ROOT_RIGHT);
+            else root_split_seq.push_back(ROOT_BOTH);
+
+            if (has_left) sets_to_left_child.push_back(i);
+            if (has_right) sets_to_right_child.push_back(i);
         }
 
         // what base4_rank_t does?

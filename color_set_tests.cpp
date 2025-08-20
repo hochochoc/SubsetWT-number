@@ -54,6 +54,7 @@ vector<pair<int, int>> load_queries() {
 
 vector<vector<int64_t>> load_color_sets() {
     string filename = "/scratch/project_2014447/coli3682-binary-color-dump.bin";
+    // string filename = "output.bin";
     ifstream file(filename, ios::binary);
     vector<vector<int64_t>> colorSets;
 
@@ -172,15 +173,28 @@ vector<int64_t> randomize_1000() {
 }
 
 vector<int64_t> convert(vector<int64_t> perm, vector<int64_t> reorderColors) {
-    vector<int64_t> orginalColorSet;
-    orginalColorSet.reserve(reorderColors.size());
-    for (int64_t c : reorderColors) {
-        int64_t orgColorCode = perm[c];
-        orginalColorSet.push_back(orgColorCode);
+    size_t n = reorderColors.size();
+    vector<int64_t> originalColorSet(n);
+
+    // Map colors
+    for (size_t i = 0; i < n; i++) {
+        originalColorSet[i] = perm[reorderColors[i]];
     }
 
-    std::sort(orginalColorSet.begin(), orginalColorSet.end());
-    return orginalColorSet;
+    // Counting sort
+    const int64_t k = 3682; // max possible color value + 1
+    vector<int64_t> count(k, 0);
+
+    for (int64_t c : originalColorSet) count[c]++;
+    
+    size_t idx = 0;
+    for (int64_t val = 0; val < k; val++) {
+        while (count[val]--) {
+            originalColorSet[idx++] = val;
+        }
+    }
+
+    return originalColorSet;
 }
 
 int main() {
@@ -191,59 +205,72 @@ int main() {
 
     // Load color sets
     vector<vector<int64_t>> colorsets = load_color_sets();
-    pair<vector<int64_t>, vector<vector<int64_t>>> reordered = load_reordered_colors(); 
-    vector<int64_t> perm = reordered.first;
-    SuccinctPerm p = SuccinctPerm(perm); // permutation of colors [orginal color code 1, orginal color code 2, ...] 0-based index
 
-    // new subsets after reordering the colors
-    vector<vector<int64_t>> reorderedColorSets;
-    reorderedColorSets.resize(colorsets.size());
+    int64_t t0 = 0;
+    int64_t t1 = 0;
+    int64_t t2 = 0;
 
-    for (size_t i = 0; i < colorsets.size(); i++) {
-        vector<int64_t>& originalColorSet = colorsets[i];
-        vector<int64_t>& reorderedSet = reorderedColorSets[i];
+    // t0 = current_time_micros();
+    // pair<vector<int64_t>, vector<vector<int64_t>>> reordered = load_reordered_colors(); 
+    // vector<int64_t> perm = reordered.first;
+    // SuccinctPerm p(perm);
 
-        reorderedSet.reserve(originalColorSet.size());
+    // vector<vector<int64_t>> reorderedColorSets;
+    // reorderedColorSets.resize(colorsets.size());
 
-        std::transform(
-            originalColorSet.begin(), originalColorSet.end(),
-            std::back_inserter(reorderedSet),
-            [&p](int64_t code) { return p.inverse(code); }
-        );
+    // for (size_t i = 0; i < colorsets.size(); i++) {
+    //     const auto& originalColorSet = colorsets[i];
+    //     auto& reorderedSet = reorderedColorSets[i];
 
-        std::sort(reorderedSet.begin(), reorderedSet.end());
-    }
+    //     reorderedSet.resize(originalColorSet.size());  // allocate exact size
 
-    vector<int64_t> convertBack = convert(perm, reorderedColorSets[0]);
+    //     // direct index-based transform instead of back_inserter
+    //     for (size_t j = 0; j < originalColorSet.size(); j++) {
+    //         reorderedSet[j] = p.inverse(originalColorSet[j]);
+    //     }
 
-    assert(convertBack == colorsets[0]);
+    //     // if sets are already sorted before mapping, you can sort ONCE globally instead of per set
+    //     std::sort(reorderedSet.begin(), reorderedSet.end());
+    // }
+    // t1 = current_time_micros();
+    // cout << "Reordered: " << (double)(t1-t0)/1000 << " ms" << endl;
 
-    cout << "Num of docs: " << reorderedColorSets.size() << endl;
+    // vector<int64_t> convertBack = convert(perm, reorderedColorSets[0]);
+
+    // assert(convertBack == colorsets[0]);
+
+    // cout << "Num of docs: " << reorderedColorSets.size() << endl;
     
-    int64_t t0 = current_time_micros();
-    rrr_generalization_t sswt(reorderedColorSets, 3682);
-    int64_t t1 = current_time_micros();
-    cout << "Tree building time RRR after reordered: " << (double)(t1-t0) << " us" << endl;
+    
+
+    t0 = current_time_micros();
+    rrr_generalization_t sswt(colorsets, 3682);
+    t1 = current_time_micros();
+    cout << "Tree building time RRR: " << (double)(t1-t0) << " us" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
 
 
     vector<pair<int, int>> queries = load_queries();
     uint64_t total_extraction_time = 0;
+    uint64_t mapping_time = 0;
     std::vector<std::pair<size_t, uint64_t>> extraction_data_points; // (result size, time in microseconds)
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.extract_set(p.first);
-        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
-        assert (reorderedColorSets[p.first-1] == result);
-        assert (colorsets[p.first-1] == oresult);
+        // vector<int64_t> oresult = convert(perm, result);
+        // t2 = current_time_micros();
+        // assert (reorderedColorSets[p.first-1] == result);
+        assert (colorsets[p.first-1] == result);
 
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_extraction_time += time_micros;
+        // mapping_time += (t2-t1);
         extraction_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average extraction time: " << total_extraction_time/queries.size() << endl;
-    std::ofstream eout("extract_plot_data_rrr_reordered.csv");
+    // cout << "Average mapping time: " << mapping_time/queries.size() << endl;
+    std::ofstream eout("extract_plot_data_rrr.csv");
     eout << "result_size,time_micros\n";
     for (const auto& [size, time] : extraction_data_points) {
              eout << size << "," << time << "\n";
@@ -252,21 +279,25 @@ int main() {
 
     // // Intersect and union
     uint64_t total_i_time = 0;
+    uint64_t i_mapping_time = 0;
     std::vector<std::pair<size_t, uint64_t>> intersection_data_points; // (result size, time in microseconds)
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.intersect(p.first, p.second);
-        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
+        // vector<int64_t> oresult = convert(perm, result);
+        // t2 = current_time_micros();
 
         assert(sswt.flat_intersect_two(p.first, p.second) == result);
         
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_i_time += time_micros;
+        // i_mapping_time += (t2-t1);
         intersection_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average intersection time: " << total_i_time/queries.size() << endl;
-    std::ofstream out("intersect_plot_data_rrr_reordered.csv");
+    // cout << "Average mapping time: " << i_mapping_time/queries.size() << endl;
+    std::ofstream out("intersect_plot_data_rrr.csv");
     out << "result_size,time_micros\n";
     for (const auto& [size, time] : intersection_data_points) {
         out << size << "," << time << "\n";
@@ -274,21 +305,25 @@ int main() {
     out.close();
 
     uint64_t total_ur_time = 0;
+    uint64_t ur_mapping_time = 0;
     std::vector<std::pair<size_t, uint64_t>> ur_data_points; // (result size, time in microseconds)
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.union_range(p.first, p.second);
-        vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
+        // vector<int64_t> oresult = convert(perm, result);
+        // t2 = current_time_micros();
 
         assert(sswt.flat_union(p.first, p.second) == result);
 
         uint64_t time_micros = (t1 - t0);
         total_ur_time += time_micros;
+        // ur_mapping_time += (t2-t1);
         ur_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average union range time: " << total_ur_time/queries.size() << endl;
-    std::ofstream urout("ur_plot_data_rrr_reordered.csv");
+    // cout << "Average mapping time: " << ur_mapping_time/queries.size() << endl;
+    std::ofstream urout("ur_plot_data_rrr.csv");
     urout << "result_size,time_micros\n";
     for (const auto& [size, time] : ur_data_points) {
         urout << size << "," << time << "\n";
