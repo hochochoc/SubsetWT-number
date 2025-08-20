@@ -14,7 +14,7 @@
 
 using namespace std;
 
-template<typename base4_rank_t, typename perm_rank_t>
+template<typename base4_rank_t>
 class SubsetWT{
 
 public:
@@ -24,10 +24,17 @@ public:
     static const int64_t ROOT_LEFT = 2; // '10'
     static const int64_t ROOT_BOTH = 3; // '11'
 
-    static const int64_t CHILD_RIGHT = 1; // '01'
-    static const int64_t CHILD_LEFT = 2; // '10'
-    static const int64_t CHILD_BOTH = 3; // '11'
-    static const int64_t CHILD_ALL = 0; // '?'
+    // static const int64_t CHILD_RIGHT = 1; // '01'
+    // static const int64_t CHILD_LEFT = 2; // '10'
+    // static const int64_t CHILD_BOTH = 3; // '11'
+    // static const int64_t CHILD_ALL = 0; // '?'
+    // static const int64_t CHILD_DEAD = 4;
+    enum : char {
+        CHILD_LEFT  = 2,
+        CHILD_RIGHT = 1,
+        CHILD_BOTH  = 3,
+        CHILD_ALL   = 0,
+    };
 
     vector<int64_t> alphabet;
     vector<int64_t> char_to_idx; // Vector of length 256 mapping characters to their indices in the alphabet
@@ -41,7 +48,6 @@ public:
     // Alphabet intervals of child nodes
     vector<optional<pair<int64_t, int64_t>>> child_intervals;
 
-    perm_rank_t sp;
 private:
 
     constexpr int64_t get_left_child_idx(int64_t child_idx) const{
@@ -81,135 +87,273 @@ private:
         int64_t child_idx;
         int64_t start, end;
         vector<int64_t> sets_in_this_child;
-        bool post_process; 
 
-        vector<int64_t> both_index_in_left;
-        vector<int64_t> both_index_in_right;
-        vector<int64_t> index_sets_to_both;
+        Task(int64_t cidx, int64_t s, int64_t e, vector<int64_t> &&sets) 
+            : child_idx(cidx), start(s), end(e), sets_in_this_child(std::move(sets)) {}
 
-        Task(int64_t cidx, int64_t s, int64_t e, vector<int64_t> &&sets, bool post = false) 
-            : child_idx(cidx), start(s), end(e), sets_in_this_child(std::move(sets)), post_process(post) {}
+        // Default move is fine
+        Task(Task&&) noexcept = default;
+        Task& operator=(Task&&) noexcept = default;
+
+        // (Optional) prevent accidental copies
+        Task(const Task&) = delete;
+        Task& operator=(const Task&) = delete;
+
     };
 
     // Helper function used in the constructor
     // Alphabet must be initialized before calling
     // [start, end) is a half-open interval
-    vector<char> init_children_recursion(int64_t child_idx, int64_t start, int64_t end, const vector<vector<int64_t>>& sets, vector<int64_t>&& sets_in_this_child){
-        stack<Task> task_stack;
+    // vector<char> init_children_recursion(int64_t child_idx, int64_t start, int64_t end, const vector<vector<int64_t>>& sets, vector<int64_t>&& sets_in_this_child){
+    //     stack<Task> task_stack;
 
-        unordered_map<int64_t, vector<char>> split_seqs;
+    //     vector<vector<char>> split_seqs(children.size());
+
+    //     task_stack.emplace(child_idx, start, end, std::move(sets_in_this_child));
+
+    //     while (!task_stack.empty()) 
+    //     {
+    //         Task task = std::move(task_stack.top());
+    //         task_stack.pop();
+
+    //         int64_t child_idx = task.child_idx;
+    //         int64_t start = task.start;
+    //         int64_t end = task.end;
+    //         int64_t mid = (task.start+task.end)/2;
+
+    //         int64_t left_idx = get_left_child_idx(child_idx);
+    //         int64_t right_idx = get_right_child_idx(child_idx);
+
+    //         if (task.post_process) {
+    //             bool left_leaf = leaf_next(start, mid);
+    //             bool right_leaf = leaf_next(mid, end);
+
+    //             auto& left_seq = split_seqs[left_idx];
+    //             auto& right_seq = split_seqs[right_idx];
+    //             auto& this_seq = split_seqs[child_idx];
+
+    //             for (int isx = task.index_sets_to_both.size() - 1; isx >= 0; --isx) {
+    //                 int64_t parent_idx = task.index_sets_to_both[isx];
+    //                 int64_t left_child_idx = task.both_index_in_left[isx];
+    //                 int64_t right_child_idx = task.both_index_in_right[isx];
+                   
+    //                 if ((left_leaf || left_seq[left_child_idx] == CHILD_ALL) && 
+    //                 (right_leaf || right_seq[right_child_idx] == CHILD_ALL)) {
+    //                     this_seq[parent_idx] = CHILD_ALL;
+    //                     if (!left_leaf) {
+    //                         left_seq[left_child_idx] = CHILD_DEAD;
+    //                     }
+    //                     if (!right_leaf) {
+    //                         right_seq[right_child_idx] = CHILD_DEAD;
+    //                     }
+    //                 }
+    //             }
+
+    //             if (!left_leaf) {
+    //                 left_seq.erase(std::remove(left_seq.begin(), 
+    //                                             left_seq.end(),
+    //                                             CHILD_DEAD),
+    //                                 left_seq.end());
+    //                 children[left_idx] = base4_rank_t(left_seq);
+    //             }
+
+    //             if (!right_leaf) {
+    //                 right_seq.erase(std::remove(right_seq.begin(), 
+    //                                             right_seq.end(),
+    //                                             CHILD_DEAD),
+    //                                 right_seq.end());
+    //                 children[right_idx] = base4_rank_t(right_seq);
+    //             }
+                
+    //             continue;
+    //         }
+
+    //         // Pre-process
+    //         if (leaf_next(start, end)) continue;
+            
+    //         child_intervals[child_idx] = {start, end};
+    //         // [start, midpoint) go left, [midpoint, end) go right
+
+    //         const bool has_right_bound = (end < (int64_t)alphabet.size());
+    //         const int64_t right_bound  = has_right_bound ? alphabet[end] : std::numeric_limits<int64_t>::max();
+
+    //         // Set indexes that go to left and to right
+    //         vector<int64_t> sets_to_left, sets_to_right;
+    //         sets_to_left.reserve(task.sets_in_this_child.size());
+    //         sets_to_right.reserve(task.sets_in_this_child.size());
+
+    //         task.clear_temp();
+    //         auto& both_index_in_left  = task.both_index_in_left;
+    //         auto& both_index_in_right = task.both_index_in_right;
+    //         auto& index_sets_to_both  = task.index_sets_to_both;
+
+    //         vector<char> split_seq; // 0 = left, 1 = right, 2 = both
+    //         split_seq.reserve(task.sets_in_this_child.size());
+
+    //         // Split the alphabet
+    //         for(size_t idx = 0; idx < task.sets_in_this_child.size(); idx++) {
+    //             int64_t i = task.sets_in_this_child[idx];
+
+    //             auto itL = std::lower_bound(sets[i].begin(), sets[i].end(), alphabet[start]);
+    //             auto itM = std::lower_bound(itL, sets[i].end(), alphabet[mid]);
+    //             const bool has_left = (itL != itM); 
+    //             const bool has_right = (itM != sets[i].end() && *itM < right_bound);
+
+            
+    //             if(has_left && !has_right) split_seq.push_back(CHILD_LEFT);
+    //             else if(!has_left && has_right) split_seq.push_back(CHILD_RIGHT);
+    //             else split_seq.push_back(CHILD_BOTH);
+
+    //             if (has_left && has_right) {
+    //                 both_index_in_left.push_back(sets_to_left.size()); // index of Both in left child
+    //                 both_index_in_right.push_back(sets_to_right.size()); // index of Both in right child
+    //                 index_sets_to_both.push_back(idx); // index of Both in current node, values of index_sets_to_both match index of split_seq
+    //             } 
+    //             if(has_left) sets_to_left.push_back(i);
+    //             if(has_right) sets_to_right.push_back(i);
+    //         }
+
+    //         Task post_task(child_idx, start, end, {});
+    //         post_task.index_sets_to_both.swap(index_sets_to_both);
+    //         post_task.both_index_in_left.swap(both_index_in_left);
+    //         post_task.both_index_in_right.swap(both_index_in_right);
+    //         post_task.post_process = true; 
+    //         split_seqs[child_idx] = std::move(split_seq);
+    //         task_stack.push(std::move(post_task));
+
+    //         if (left_idx < children.size()) {
+    //             task_stack.emplace(left_idx, start, mid, std::move(sets_to_left));
+    //         }
+    //         if (right_idx < children.size()) {
+    //             task_stack.emplace(right_idx, mid, end, std::move(sets_to_right));
+    //         }
+            
+    //         continue;
+    //     }
+    //     return split_seqs[child_idx];
+    // }
+    void init_children_recursion(
+        int64_t child_idx,
+        int64_t start,
+        int64_t end,
+        const vector<vector<int64_t>>& sets,
+        vector<int64_t>&& sets_in_this_child)
+    {
+        stack<Task> task_stack;
 
         task_stack.emplace(child_idx, start, end, std::move(sets_in_this_child));
 
-        while (!task_stack.empty()) 
-        {
+        // Reusable buffers to avoid reallocation churn
+        vector<int64_t> sets_to_left;
+        vector<int64_t> sets_to_right;
+        vector<char> split_seq;       // symbols for the current node
+
+        while (!task_stack.empty()) {
             Task task = std::move(task_stack.top());
             task_stack.pop();
 
             int64_t child_idx = task.child_idx;
             int64_t start = task.start;
-            int64_t end = task.end;
-            int64_t mid = (task.start+task.end)/2;
+            int64_t end   = task.end;
+            int64_t mid   = (start + end) / 2;
 
-            int64_t left_idx = get_left_child_idx(child_idx);
+            int64_t left_idx  = get_left_child_idx(child_idx);
             int64_t right_idx = get_right_child_idx(child_idx);
 
-            if (task.post_process) {
-                bool left_leaf = leaf_next(start, mid);
-                bool right_leaf = leaf_next(mid, end);
-
-                auto& left_seq = split_seqs[left_idx];
-                auto& right_seq = split_seqs[right_idx];
-                auto& this_seq = split_seqs[child_idx];
-
-                for (int isx = task.index_sets_to_both.size() - 1; isx >= 0; --isx) {
-                    int64_t parent_idx = task.index_sets_to_both[isx];
-                    int64_t left_child_idx = task.both_index_in_left[isx];
-                    int64_t right_child_idx = task.both_index_in_right[isx];
-                   
-                    if ((left_leaf || left_seq[left_child_idx] == CHILD_ALL) && (right_leaf || right_seq[right_child_idx] == CHILD_ALL)) {
-                        this_seq[parent_idx] = CHILD_ALL;
-                        if (!left_leaf) {
-                            left_seq.erase(left_seq.begin() + left_child_idx);
-                        }
-                        if (!right_leaf) {
-                            right_seq.erase(right_seq.begin() + right_child_idx);
-                        }
-                    }
-                }
-
-                if (!left_leaf) {
-                    children[left_idx] = base4_rank_t(left_seq);
-                }
-
-                if (!right_leaf) {
-                    children[right_idx] = base4_rank_t(right_seq);
-                }
-                
+            // Leaf case → no split needed
+            if (leaf_next(start, end)) {
                 continue;
             }
 
-            // Pre-process
-
-            if (leaf_next(start, end)) continue;
-            
             child_intervals[child_idx] = {start, end};
-            int64_t middle_char = alphabet[(start+end)/2];
-            // [start, midpoint) go left, [midpoint, end) go right
+            const bool has_right_bound = (end < (int64_t)alphabet.size());
+            const int64_t right_bound  = has_right_bound ? alphabet[end]
+                                                        : std::numeric_limits<int64_t>::max();
 
-            // Set indexes that go to left and to right
+            // Reuse buffers (clear retains capacity).
+            sets_to_left.clear();
+            sets_to_right.clear();
+            split_seq.clear();
+
+            // Prepare sequences for children
             vector<int64_t> sets_to_left, sets_to_right;
+            vector<char> split_seq;
+            split_seq.reserve(task.sets_in_this_child.size());
+            sets_to_left.reserve(task.sets_in_this_child.size());
+            sets_to_right.reserve(task.sets_in_this_child.size());
 
-            vector<int64_t> both_index_in_left, both_index_in_right, index_sets_to_both;
-            vector<char> split_seq; // 0 = left, 1 = right, 2 = both
-
-            // Split the alphabet
-            for(size_t idx = 0; idx < task.sets_in_this_child.size(); idx++) {
-                bool has_left = false;
-                bool has_right = false;
+            // --- Split loop ---
+            for (size_t idx = 0; idx < task.sets_in_this_child.size(); idx++) {
                 int64_t i = task.sets_in_this_child[idx];
-                for(int64_t c : sets[i]){
-                    if(c >= alphabet[start] && c < middle_char){
-                        has_left = true;
-                    } else if(c >= middle_char && (end == alphabet.size() || c < alphabet[end])){
-                        has_right = true;
-                    }
-                    if (has_left && has_right) {
-                        break;
-                    }
+                assert(i <= sets.size());
+
+                // Left & right membership
+                auto itL = std::lower_bound(sets[i].begin(), sets[i].end(), alphabet[start]);
+                auto itM = std::lower_bound(itL, sets[i].end(), alphabet[mid]);
+                const bool has_left  = (itL != itM);
+                const bool has_right = (itM != sets[i].end() && *itM < right_bound);
+
+                bool left_leaf  = leaf_next(start, mid);
+                bool right_leaf = leaf_next(mid, end);
+
+                // --- Full coverage check ---
+                bool left_full_cover  = has_left &&
+                    ((itM - itL) == (mid - start));   // covers entire [start, mid)
+                bool right_full_cover = has_right &&
+                    (std::upper_bound(itM, sets[i].end(), alphabet[end-1]) - itM == (end - mid));
+
+                bool left_full  = has_left  && (left_leaf  || left_full_cover);
+                bool right_full = has_right && (right_leaf || right_full_cover);
+
+                // cout << "Node: " << child_idx << endl;
+
+                // --- Classification ---
+                if (left_full && right_full) {
+                    // Parent becomes ALL, no need to propagate
+                    split_seq.push_back(CHILD_ALL);
+                    continue;
                 }
-                if(has_left && !has_right) split_seq.push_back(CHILD_LEFT);
-                else if(!has_left && has_right) split_seq.push_back(CHILD_RIGHT);
-                else split_seq.push_back(CHILD_BOTH);
 
                 if (has_left && has_right) {
-                    both_index_in_left.push_back(sets_to_left.size()); // index of Both in left child
-                    both_index_in_right.push_back(sets_to_right.size()); // index of Both in right child
-                    index_sets_to_both.push_back(idx); // index of Both in current node, values of index_sets_to_both match index of split_seq
-                } 
-                if(has_left) sets_to_left.push_back(i);
-                if(has_right) sets_to_right.push_back(i);
+                    split_seq.push_back(CHILD_BOTH);
+                } else if (has_left) {
+                    split_seq.push_back(CHILD_LEFT);
+                } else if (has_right) {
+                    split_seq.push_back(CHILD_RIGHT);
+                }
+
+                if (has_left)   sets_to_left.push_back(i);
+                if (has_right) sets_to_right.push_back(i);
             }
 
-            Task post_task(child_idx, start, end, {});
-            post_task.index_sets_to_both = std::move(index_sets_to_both);
-            post_task.both_index_in_left = std::move(both_index_in_left);
-            post_task.both_index_in_right = std::move(both_index_in_right);
-            post_task.post_process = true; 
-            split_seqs[child_idx] = std::move(split_seq);
-            task_stack.push(std::move(post_task));
+            cout << "Node: " << child_idx << endl;
+            assert(split_seq.size() <= sets_in_this_child.size());
+            assert(child_idx < children.size());
 
-            if (left_idx < children.size()) {
-                task_stack.emplace(left_idx, start, mid, std::move(sets_to_left));
-            }
-            if (right_idx < children.size()) {
-                task_stack.emplace(right_idx, mid, end, std::move(sets_to_right));
-            }
+            // Store the split sequence for this node
+            children[child_idx]   = base4_rank_t(split_seq);
+
             
-            continue;
+            // for (auto &c: split_seqs[child_idx]) {
+            //     cout << static_cast<int>(c) << " "; 
+            // }
+            // cout << endl;
+            cout << "Node: " << child_idx << endl;
+
+            // Push children if not leaves
+            if (left_idx < children.size() && !leaf_next(start, mid)) {
+                task_stack.emplace(left_idx, start, mid, std::move(sets_to_left));
+                sets_to_left = {};
+            }
+            if (right_idx < children.size() && !leaf_next(mid, end)) {
+                task_stack.emplace(right_idx, mid, end, std::move(sets_to_right));
+                sets_to_right = {};
+            }
         }
-        return split_seqs[child_idx];
+
+        return;
     }
+
 
     // Helper function used in the constructor
     // Alphabet must be initialized before calling
@@ -220,7 +364,6 @@ private:
         // Initialize the root
         vector<char> root_split_seq;
         vector<int64_t> sets_to_left_child, sets_to_right_child;
-        vector<int64_t> both_index_in_left, both_index_in_right, index_sets_to_both;
 
         for(size_t i = 0; i < sets.size(); i++) {
             bool has_left = false;
@@ -228,24 +371,28 @@ private:
             // TODO: increase time usage here 
             // color set is sorted 
             for(int64_t c : sets[i]){
-                if (has_left && has_right) {
-                    break;
-                }
                 if(c < middle_char) has_left = true;
                 else has_right = true;
+                if (has_left && has_right) break;
             }
 
             assert (has_left || has_right); // not allow empty subsets
 
-            if(has_left && !has_right) root_split_seq.push_back(ROOT_LEFT);
-            else if(!has_left && has_right) root_split_seq.push_back(ROOT_RIGHT);
-            else if(has_left && has_right) root_split_seq.push_back(ROOT_BOTH);
-
             if (has_left && has_right) {
-                both_index_in_left.push_back(sets_to_left_child.size()); // index of Both in left child
-                both_index_in_right.push_back(sets_to_right_child.size()); // index of Both in right child
-                index_sets_to_both.push_back(i); // index of Both in current node, values of index_sets_to_both match index of split_seq
-            } 
+                bool full_cover = (sets[i].front() == alphabet.front() &&
+                               sets[i].back()  == alphabet.back() &&
+                               (int64_t)sets[i].size() == sigma);
+                if (full_cover) {
+                    root_split_seq.push_back(ROOT_NONE);
+                    continue;
+                } else {
+                    root_split_seq.push_back(ROOT_BOTH);
+                }                
+            } else if (has_left) {
+                root_split_seq.push_back(ROOT_LEFT);
+            } else {
+                root_split_seq.push_back(ROOT_RIGHT);
+            }
 
             if(has_left) sets_to_left_child.push_back(i);
             if(has_right) sets_to_right_child.push_back(i);
@@ -258,31 +405,11 @@ private:
         int64_t mid = sigma/2;
 
         // Initialize the children
-        vector<char> left_symbols = init_children_recursion(0, 0, mid, sets, std::move(sets_to_left_child)); // Left child of root
-        vector<char> right_symbols = init_children_recursion(1, mid, sigma, sets, std::move(sets_to_right_child)); // Right child of root
-
-
-        // Construct the base-4 rank support
-        for (size_t isx = 0; isx < index_sets_to_both.size(); isx ++) {
-            // leaf or ALL in next child 
-            if (((leaf_next(0, mid) || left_symbols[both_index_in_left[isx]]== CHILD_ALL) && (leaf_next(mid, sigma) || right_symbols[both_index_in_right[isx]] == CHILD_ALL))) {
-                root_split_seq[index_sets_to_both[isx]] = ROOT_NONE;
-                if (!leaf_next(0, mid)) {
-                    left_symbols.erase(left_symbols.begin() + both_index_in_left[isx]); // remove All symbol from left child's symbol list 
-                }
-
-                if (!leaf_next(mid, sigma)) {
-                    right_symbols.erase(right_symbols.begin() + both_index_in_right[isx]); // remove All symbol from left child's symbol list 
-                }
-            }
+        if (!leaf_next(0, mid) && !sets_to_left_child.empty()) {
+            init_children_recursion(0, 0, mid, sets, std::move(sets_to_left_child)); // Left child of root
         }
-
-        if (!leaf_next(0, mid)) {
-            children[0] = base4_rank_t(left_symbols); // encode base-4 sequence 
-        }
-
-        if (!leaf_next(mid, sigma)) {
-            children[1] = base4_rank_t(right_symbols);
+        if (!leaf_next(mid, sigma) && !sets_to_right_child.empty()) {
+            init_children_recursion(1, mid, sigma, sets, std::move(sets_to_right_child)); // Right child of root
         }
 
         // what base4_rank_t does?
@@ -467,8 +594,7 @@ public:
 
     SubsetWT(){}
 
-    SubsetWT(const vector<vector<int64_t>>& sets, vector<int64_t> &perm, int64_t total){
-        sp = perm_rank_t(perm);
+    SubsetWT(const vector<vector<int64_t>>& sets, int64_t total){
         init_alphabet(sets, total);
         init_tree(sets);
     }
@@ -655,7 +781,6 @@ public:
             }
         }
         sz += child_intervals.size() * sizeof(optional<pair<int64_t, int64_t>>);
-        sz += sp.size_in_bytes();
         return sz;
     }
 

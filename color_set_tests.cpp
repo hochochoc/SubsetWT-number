@@ -213,7 +213,6 @@ pair<vector<int64_t>, vector<vector<int64_t>>> load_reordered_colors() {
     file.close();
 
     cout << "Number of colors: " << perm.size() << endl;
-    cout << "Number of colorSets: " << colorSets.size() << endl;
 
     return {perm, colorSets};
 }
@@ -233,46 +232,48 @@ vector<int64_t> convert(vector<int64_t> perm, vector<int64_t> reorderColors) {
 int main() {
 
     // // Define the types of the four main variants   
-    typedef SubsetWT<SDSL_WT<sdsl::wt_hutu<>, 4>, SuccinctPerm> nested_wt_t;
-    typedef SubsetWT<RRR_Generalization<4>, SuccinctPerm> rrr_generalization_t;
+    typedef SubsetWT<SDSL_WT<sdsl::wt_hutu<>, 4>> nested_wt_t;
+    typedef SubsetWT<RRR_Generalization<4>> rrr_generalization_t;
     // typedef SubsetWT<SplitStructure<4>, SplitStructure<3>, SuccinctPerm> split_t;
     // typedef SubsetWT<BitMagic<4>, BitMagic<3>, SuccinctPerm> bitmagic_t;
 
 
     vector<vector<int64_t>> colorsets = load_color_sets(); // orginal color sets
-    pair<vector<int64_t>, vector<vector<int64_t>>> reordered = load_reordered_colors(); 
-    vector<int64_t> perm = reordered.first;
-    SuccinctPerm p = SuccinctPerm(perm); // permutation of colors [orginal color code 1, orginal color code 2, ...] 0-based index
+    // int64_t t0 = current_time_micros();
+    // pair<vector<int64_t>, vector<vector<int64_t>>> reordered = load_reordered_colors(); 
+    // vector<int64_t> perm = reordered.first;
+    // SuccinctPerm p(perm);
 
-    // new subsets after reordering the colors
-    vector<vector<int64_t>> reorderedColorSets;
-    reorderedColorSets.resize(colorsets.size());
+    // vector<vector<int64_t>> reorderedColorSets;
+    // reorderedColorSets.resize(colorsets.size());
 
-    for (size_t i = 0; i < colorsets.size(); i++) {
-        vector<int64_t>& originalColorSet = colorsets[i];
-        vector<int64_t>& reorderedSet = reorderedColorSets[i];
+    // for (size_t i = 0; i < colorsets.size(); i++) {
+    //     const auto& originalColorSet = colorsets[i];
+    //     auto& reorderedSet = reorderedColorSets[i];
 
-        reorderedSet.reserve(originalColorSet.size());
+    //     reorderedSet.resize(originalColorSet.size());  // allocate exact size
 
-        std::transform(
-            originalColorSet.begin(), originalColorSet.end(),
-            std::back_inserter(reorderedSet),
-            [&p](int64_t code) { return p.inverse(code); }
-        );
+    //     // direct index-based transform instead of back_inserter
+    //     for (size_t j = 0; j < originalColorSet.size(); j++) {
+    //         reorderedSet[j] = p.inverse(originalColorSet[j]);
+    //     }
 
-        std::sort(reorderedSet.begin(), reorderedSet.end());
-    }
+    //     // if sets are already sorted before mapping, you can sort ONCE globally instead of per set
+    //     std::sort(reorderedSet.begin(), reorderedSet.end());
+    // }
+    // int64_t t1 = current_time_micros();
+    // cout << "Reordered: " << (double)(t1-t0)/1000 << " ms" << endl;
 
-    vector<int64_t> convertBack = convert(perm, reorderedColorSets[0]);
+    // vector<int64_t> convertBack = convert(perm, reorderedColorSets[0]);
 
-    assert(convertBack == colorsets[0]);
+    // assert(convertBack == colorsets[0]);
 
-    cout << "Num of k-mers: " << reorderedColorSets.size() << endl;
+    // cout << "Num of docs: " << reorderedColorSets.size() << endl;
 
     int64_t t0 = current_time_micros();
-    nested_wt_t sswt(reorderedColorSets, perm, perm.size());
+    nested_wt_t sswt(colorsets, 3682);
     int64_t t1 = current_time_micros();
-    cout << "Tree building time: " << (double)(t1-t0)/1000 << " ms" << endl;
+    cout << "Tree building time of Hutu all: " << (double)(t1-t0)/1000 << " ms" << endl;
     cout << "Size: " << sswt.size_in_bytes() << endl;
 
     vector<pair<int, int>> queries = load_queries();
@@ -281,15 +282,16 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.extract_set(p.first);
+        // vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
-        assert (reorderedColorSets[p.first-1] == result);
+        assert (colorsets[p.first-1] == result);
 
         uint64_t time_micros = (t1 - t0); // convert to microseconds
         total_extraction_time += time_micros;
         extraction_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average extraction time: " << total_extraction_time/queries.size() << endl;
-    std::ofstream eout("extract_plot_data_hutu_all_reordered.csv");
+    std::ofstream eout("extract_plot_data_hutu_all.csv");
     eout << "result_size,time_micros\n";
     for (const auto& [size, time] : extraction_data_points) {
              eout << size << "," << time << "\n";
@@ -302,6 +304,7 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.intersect(p.first, p.second);
+        // vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
 
         assert(sswt.flat_intersect_two(p.first, p.second) == result);
@@ -311,7 +314,7 @@ int main() {
         intersection_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average intersection time: " << total_i_time/queries.size() << endl;
-    std::ofstream out("intersect_plot_data_hutu_all_reordered.csv");
+    std::ofstream out("intersect_plot_data_hutu_all.csv");
     out << "result_size,time_micros\n";
     for (const auto& [size, time] : intersection_data_points) {
         out << size << "," << time << "\n";
@@ -323,6 +326,7 @@ int main() {
     for (const auto& p : queries) {
         t0 = current_time_micros();
         vector<int64_t> result = sswt.union_range(p.first, p.second);
+        // vector<int64_t> oresult = convert(perm, result);
         t1 = current_time_micros();
 
         assert(sswt.flat_union(p.first, p.second) == result);
@@ -332,7 +336,7 @@ int main() {
         ur_data_points.emplace_back(result.size(), time_micros);
     }
     cout << "Average union range time: " << total_ur_time/queries.size() << endl;
-    std::ofstream urout("ur_plot_data_hutu_all_reordered.csv");
+    std::ofstream urout("ur_plot_data_hutu_all.csv");
     urout << "result_size,time_micros\n";
     for (const auto& [size, time] : ur_data_points) {
         urout << size << "," << time << "\n";
